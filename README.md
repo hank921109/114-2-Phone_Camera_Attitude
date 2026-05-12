@@ -81,11 +81,11 @@ def calculate_camera_attitude(R_w2c):
 
 ### 4. 專案視覺效果
 
-![rt1_inliers](pic/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
+![rt1_inliers](data/assets/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
 *圖 1: RANSAC 線段分群與消失點檢測（紅色：X 軸線段，綠色：Y 軸線段，藍色：Z 軸線段）*
 
-![rt1_axes](RunResult/rt1_axes.png)
+![rt1_axes](outputs/rt1_axes.png)
 *圖 2: 自動推算的 X, Y, Z 笛卡爾坐標軸（疊加於原圖）*
 
-![ui](pic/ui.png)
+![ui](data/assets/ui.png)
 *圖 3: PyQt5 使用者介面與標定結果展示（顯示旋轉矩陣與焦距）*
