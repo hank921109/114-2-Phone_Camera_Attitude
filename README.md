@@ -32,18 +32,19 @@
 #### 模組拆解 (Breakdown)
 ```mermaid
 graph TD
-    subgraph "Vanishing Point Calibration System"
-        ML[Media Loader<br/>Support Image/Video<br/>Memory Pipe Integration]
-        LE[Line Extractor<br/>Canny & Hough Transform<br/>NEON Optimization]
-        VE[VP Engine<br/>RANSAC Algorithm<br/>Vectorized Math]
-        PS[Pose Solver<br/>Rotation & Focal Solver<br/>Euler Decomposition]
-        VI[Visualizer<br/>OpenCV Rendering<br/>3D Axes Overlay]
-    end
+    System[Vanishing Point Calibration System]
     
-    ML -->|Frames| LE
-    LE -->|Lines| VE
-    VE -->|Vanishing Points| PS
-    PS -->|Attitude & Focal| VI
+    System --> ML[Media Loader]
+    System --> LE[Line Extractor]
+    System --> VE[VP Engine]
+    System --> PS[Pose Solver]
+    System --> VI[Visualizer]
+
+    ML --- ML_Desc[Support Image/Video<br/>Memory Pipe Integration]
+    LE --- LE_Desc[Canny & Hough Transform<br/>NEON Optimization]
+    VE --- VE_Desc[RANSAC Algorithm<br/>Vectorized Math]
+    PS --- PS_Desc[Rotation & Focal Solver<br/>Euler Decomposition]
+    VI --- VI_Desc[OpenCV Rendering<br/>3D Axes Overlay]
 ```
 
 ### 3. 系統設計
@@ -72,13 +73,13 @@ graph LR
 
 ### 4. 驗證
 
-![rt1_inliers](data/assets/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
+![rt1_inliers](results/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
 *圖 1: RANSAC 線段分群與消失點檢測（紅色：X 軸線段，綠色：Y 軸線段，藍色：Z 軸線段）*
 
-![rt1_axes](data/assets/rt1_axes.png)
+![rt1_axes](results/rt1_axes.png)
 *圖 2: 自動推算的 X, Y, Z 笛卡爾坐標軸（疊加於原圖）*
 
-![ui](data/assets/ui.png)
+![ui](results/ui.png)
 *圖 3: PyQt5 使用者介面與標定結果展示（顯示旋轉矩陣與焦距）*
 
 #### 4.1 影片動態測試 (Dynamic Video Test)
@@ -86,7 +87,7 @@ graph LR
 
 | 測試影片 (直接播放) | 說明 |
 | :--- | :--- |
-| <video src="data/assets/result_v1.mp4" width="320" controls></video> | 成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。 |
-| <video src="data/assets/result_v2.mp4" width="320" controls></video> | 針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。 |
+| <video src="results/result_v1.mp4" width="320" controls></video> | 成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。 |
+| <video src="results/result_v2.mp4" width="320" controls></video> | 針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。 |
 
-*   **輸出路徑**：`outputs/` (本機產出), `data/assets/` (展示文件)
+*   **輸出路徑**：`outputs/` (本機產出), `results/` (展示文件)
