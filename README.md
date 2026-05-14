@@ -52,11 +52,11 @@ graph TD
 #### 資料流圖 (DFD)
 ```mermaid
 graph LR
-    Input[Image / Video Frame] -->|ndarray, Memory Pipe| LineExt[Line Extractor]
-    LineExt -->|ndarray, N x 2 x 2| VPEngine[VP Engine: Fast Math Compare]
-    VPEngine -->|list of ndarray 3, float32| PoseSolver1[Pose Solver: Extrinsic R & Focal f]
-    PoseSolver1 -->|ndarray, float32, 3x3| PoseSolver2[Pose Solver: Euler Decomp]
-    PoseSolver2 -->|video / image| Output[Output: OpenCV Rendered]
+    Input[Image / Video Frame] -->|ndarray (H,W,3)| LineExt[Line Extractor]
+    LineExt -->|ndarray (N,2,2)| VPEngine[VP Engine: Fast Math Compare]
+    VPEngine -->|list[ndarray(3)], focal:float32| PoseSolver1[Pose Solver: Extrinsic R & Focal f]
+    PoseSolver1 -->|R:ndarray(3,3), f:float32| PoseSolver2[Pose Solver: Euler Decomp]
+    PoseSolver2 -->|attitude:ndarray(3)| Output[Output: OpenCV Rendered]
 ```
 
 #### API Table
@@ -85,9 +85,12 @@ graph LR
 #### 4.1 影片動態測試 (Dynamic Video Test)
 針對動態場景，本工具支援逐幀標定並輸出視覺化坐標軸影片。
 
-| 測試影片 (直接播放) | 說明 |
-| :--- | :--- |
-| <video src="results/result_v1.mp4" width="320" controls></video> | 成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。 |
-| <video src="results/result_v2.mp4" width="320" controls></video> | 針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。 |
+**測試影片 1：辦公室走廊**
+*   **說明**：成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。
+*   <video src="results/result_v1.mp4" width="320" controls></video>
+
+**測試影片 2：室內長廊**
+*   **說明**：針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。
+*   <video src="results/result_v2.mp4" width="320" controls></video>
 
 *   **輸出路徑**：`outputs/` (本機產出), `results/` (展示文件)

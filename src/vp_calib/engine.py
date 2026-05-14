@@ -80,12 +80,14 @@ def draw_axes_on_image(image, vps, origin_px, length=300, attitude=None):
     if attitude is not None:
         yaw, pitch, roll = attitude
         overlay = output_img.copy()
-        cv2.rectangle(overlay, (10, 10), (280, 110), (0, 0, 0), -1)
+        # 放大背景框
+        cv2.rectangle(overlay, (10, 10), (350, 160), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.5, output_img, 0.5, 0, output_img)
         
-        cv2.putText(output_img, f"Yaw:   {yaw:.2f}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-        cv2.putText(output_img, f"Pitch: {pitch:.2f}", (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
-        cv2.putText(output_img, f"Roll:  {roll:.2f}", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+        # 加大字體 (fontScale 0.8 -> 1.2, thickness 2 -> 3)
+        cv2.putText(output_img, f"Yaw:   {yaw:.2f}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
+        cv2.putText(output_img, f"Pitch: {pitch:.2f}", (20, 90), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
+        cv2.putText(output_img, f"Roll:  {roll:.2f}", (20, 130), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
             
     return output_img
 
