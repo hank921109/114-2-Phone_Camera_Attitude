@@ -67,7 +67,7 @@
 ![rt1_inliers](data/assets/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
 *圖 1: RANSAC 線段分群與消失點檢測（紅色：X 軸線段，綠色：Y 軸線段，藍色：Z 軸線段）*
 
-![rt1_axes](outputs/rt1_axes.png)
+![rt1_axes](data/assets/rt1_axes.png)
 *圖 2: 自動推算的 X, Y, Z 笛卡爾坐標軸（疊加於原圖）*
 
 ![ui](data/assets/ui.png)
@@ -78,7 +78,7 @@
 
 | 測試影片 (點擊播放) | 說明 |
 | :--- | :--- |
-| [**result_v1.mp4**](outputs/result_v1.mp4) | 成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。 |
-| [**result_v2.mp4**](outputs/result_v2.mp4) | 針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。 |
+| [**result_v1.mp4**](data/assets/result_v1.mp4) | 成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。 |
+| [**result_v2.mp4**](data/assets/result_v2.mp4) | 針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。 |
 
-*   **輸出路徑**：`outputs/result_v1.mp4`, `outputs/result_v2.mp4`
+*   **輸出路徑**：`data/assets/result_v1.mp4`, `data/assets/result_v2.mp4`
