@@ -1,5 +1,5 @@
 numpy
 matplotlib
-scikit-image
+opencv-python
 PyQt5
 Pillow

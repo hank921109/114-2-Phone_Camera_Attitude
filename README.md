@@ -9,14 +9,14 @@
 ### 1. 需求與驗證 (Requirements & Validation)
 
 #### 核心需求
-*   **功能**：針對室內走廊或建築場景的靜態影像，計算相機的 3D 姿態：**Yaw（偏航）**、**Roll（滾轉）**、**Pitch（俯仰）** 以及 **Focal Length（焦距）**。
-*   **效能**：離線標定工具，單張影像處理時間約 1-3 秒（受 RANSAC 迭代次數影響）。
+*   **功能**：針對室內走廊或建築場景的靜態影像或影片，計算相機的 3D 姿態：**Yaw（偏航）**、**Roll（滾轉）**、**Pitch（俯仰）** 以及 **Focal Length（焦距）**。
+*   **效能**：支援嵌入式設備（如 **Raspberry Pi 4**）優化。單張影像處理時間約 **0.2-0.5 秒**（受解析度縮放與早停機制加速）。
+*   **硬體適配**：針對 ARM 架構進行 OpenCV NEON 指令集優化適配。
 *   **限制**：
     *   **環境**：Python 3.10+ 執行環境。
-    *   **演算法**：基於 Scikit-Image 與 NumPy 的傳統視覺演算法。
-    *   **假設**：依賴場景中存在 3 組正交消隱點（曼哈頓世界假設），且輸入影像已預先去畸變或畸變極小。
     *   **優點**：無需特定標定板，利用環境自然線條即可推算姿態與內參。
-    *   **缺點**：在缺乏人工建築（如草地、野外）或線條混亂的環境下精度會大幅下降。
+    *   **缺點**：在缺乏人工建築（如草地、野外）或線條混亂的環境下精度會下降。
+
 
 *   **驗證計畫**：
 *   **測試條件**：輸入包含明顯平行線（如牆角、地磚接縫）的影像。
@@ -30,56 +30,39 @@
 ### 2. 系統分析 (Analysis)
 
 #### 模組拆解
-| 模組名稱 | 功能描述 |
-| :--- | :--- |
-| **Image Loader** | 透過 PyQt5 介面讀取 .jpg 或 .png 靜態影像。 |
-| **Line Extractor** | 使用 Canny 邊緣檢測與 **Probabilistic Hough Transform** 進行線段提取。 |
-| **VP Engine** | 利用 RANSAC 演算法在曼哈頓世界假設下從線段中分群出三組正交消失點。 |
-| **Pose Solver** | 根據消失點構造旋轉矩陣 $R$、推算焦距 $f$，並解析為 Y, R, P 姿態角。 |
+| 模組名稱 | 功能描述 | 核心函數 / 技術 |
+| :--- | :--- | :--- |
+| **Media Loader** | 支援影像與影片讀取。整合 **Memory Pipe** 技術。 | `cv2.imread`, `cv2.resize` |
+| **Line Extractor** | 基於 OpenCV 實作，利用 ARM NEON 指令集加速。 | `cv2.Canny`, `cv2.HoughLinesP` |
+| **VP Engine** | RANSAC 演算法優化：向量化餘弦值比較。 | `np.cross`, `np.dot`, `np.linalg.norm` |
+| **Pose Solver** | 構造旋轉矩陣 $R$、推算焦距 $f$。 | `np.transpose`, `math.atan2` |
+| **Visualizer** | **純 OpenCV 渲染架構**。支援動態姿態資訊疊加。 | `cv2.arrowedLine`, `cv2.putText`, `cv2.addWeighted` |
+
+### 3. 系統設計
 
 #### 資料流圖 (DFD)
 ```plaintext
-[Static Image] 
-  -- (ndarray, uint8, HxWx3) -------> [Line Extractor] 
-  -- (ndarray, (N, 2, 2)) ----------> [VP Engine] 
+[Image / Video Frame] 
+  -- (ndarray, Memory Pipe) --------> [Line Extractor] 
+  -- (ndarray, (N, 2, 2)) ----------> [VP Engine: Fast Math Compare] 
   -- (list[ndarray(3,)], float32) --> [Pose Solver: Extrinsic R & Focal f] 
   -- (ndarray, float32, 3x3) -------> [Pose Solver: Euler Decomp]
-  -- (text/image) ------------------> [Output & Visualization]
+  -- (video / image) ---------------> [Output: OpenCV Rendered]
 ```
 
 #### API Table
 | 模組 | 函數名稱 | 輸入 (Type) | 輸出 (Type) | 核心依賴 |
 | :--- | :--- | :--- | :--- | :--- |
-| **I/O** | `read_image()` | path (str) | image (ndarray) | `skimage.io` |
-| **Line** | `get_hough_lines()` | edges (ndarray) | lines (ndarray) | `skimage.transform` |
+| **I/O** | `read_image()` | path (str) | image (ndarray) | **OpenCV** |
+| **Line** | `get_hough_lines_cv()` | edges (ndarray) | lines (ndarray) | **OpenCV** |
 | **VP** | `run_line_ransac()` | lines (ndarray) | best_hypothesis | RANSAC / NumPy |
 | **Pose** | `calculate_camera_attitude()` | R_w2c (ndarray) | attitude (Yaw,P,R) | `math.atan2` |
+| **Draw** | `draw_axes_on_image()` | image, vps, origin | rendered_img | **OpenCV** |
 | **UI** | `setup_ui()` | MainWindow | None | `PyQt5` |
 
 ---
 
-### 3. 關鍵代碼實現參考
-
-```python
-# 旋轉矩陣轉相機絕對姿態 (Yaw-Pitch-Roll)
-def calculate_camera_attitude(R_w2c):
-    R_c2w = np.transpose(R_w2c)
-    sy = math.sqrt(R_c2w[0, 0] * R_c2w[0, 0] + R_c2w[1, 0] * R_c2w[1, 0])
-    singular = sy < 1e-6
-    if not singular:
-        pitch = math.atan2(-R_c2w[2, 0], sy)
-        yaw = math.atan2(R_c2w[1, 0], R_c2w[0, 0])
-        roll = math.atan2(R_c2w[2, 1], R_c2w[2, 2])
-    else:
-        pitch = math.atan2(-R_c2w[2, 0], sy)
-        yaw = math.atan2(-R_c2w[0, 1], R_c2w[1, 1])
-        roll = 0
-    return np.degrees([yaw, pitch, roll])
-```
-
----
-
-### 4. 專案視覺效果
+### 4. 驗證
 
 ![rt1_inliers](data/assets/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
 *圖 1: RANSAC 線段分群與消失點檢測（紅色：X 軸線段，綠色：Y 軸線段，藍色：Z 軸線段）*
@@ -89,3 +72,13 @@ def calculate_camera_attitude(R_w2c):
 
 ![ui](data/assets/ui.png)
 *圖 3: PyQt5 使用者介面與標定結果展示（顯示旋轉矩陣與焦距）*
+
+#### 4.1 影片動態測試 (Dynamic Video Test)
+針對動態場景，本工具支援逐幀標定並輸出視覺化坐標軸影片。
+
+| 測試影片 (點擊播放) | 說明 |
+| :--- | :--- |
+| [**result_v1.mp4**](outputs/result_v1.mp4) | 成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。 |
+| [**result_v2.mp4**](outputs/result_v2.mp4) | 針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。 |
+
+*   **輸出路徑**：`outputs/result_v1.mp4`, `outputs/result_v2.mp4`

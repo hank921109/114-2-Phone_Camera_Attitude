@@ -1,7 +1,7 @@
 import sys
+import cv2
 from PyQt5 import QtCore, QtGui, QtWidgets
-from skimage import io, feature, color, transform
-from vp_calib.engine import main as calib_main
+from vp_calib.engine import main as calib_main, read_image
 
 class Ui_MainWindow(object):
     def __init__(self):       
@@ -115,10 +115,14 @@ class Ui_MainWindow(object):
             return
         jpg = QtGui.QPixmap(imgName).scaled(self.label_image.width(), self.label_image.height())
         self.label_image.setPixmap(jpg)
-        rows, cols = image_read(imgName)
-        rows_prop = rows / self.label_image.height()
-        cols_prop = cols / self.label_image.width()
-        self.label_image.mousePressEvent = self.getPos
+        
+        # 使用優化後的讀取方式
+        image = read_image(imgName)
+        if image is not None:
+            rows, cols = image.shape[:2]
+            rows_prop = rows / self.label_image.height()
+            cols_prop = cols / self.label_image.width()
+            self.label_image.mousePressEvent = self.getPos
 
     def inputHeight(self):
         global h
@@ -138,24 +142,25 @@ class Ui_MainWindow(object):
         self.yLable.setText(_translate("MainWindow", str(y)))
 
     def calibrationCamera(self):
-        global imgName
-        global x
-        global y
-        global h
-        px_x = x
-        px_y = y
-        cam_h = h
-        F, M, V = calib_main(imgName, px_x, px_y, cam_h)
+        global imgName, x, y, h
+        try:
+            px_x, px_y, cam_h = x, y, h
+        except NameError:
+            QtWidgets.QMessageBox.warning(self.centralwidget, "Warning", "Please select origin point and input height first!")
+            return
+            
+        # 使用 Raspi 優化後的參數調用
+        F, M, V = calib_main(imgName, px_x, px_y, cam_h, iterations=800)
         _translate = QtCore.QCoreApplication.translate
-        self.fLable.setText(_translate("MainWindow", str(F[0])))
+        self.fLable.setText(_translate("MainWindow", f"{F[0]:.2f}" if (isinstance(F, list) and len(F)>0) else str(F)))
         self.rLable.setText(_translate("MainWindow", str(M[0])))
         self.tLable.setText(_translate("MainWindow", str(V[0])))
 
 def image_read(imgpath):
-    image = io.imread(imgName)
-    rows = image.shape[0] 
-    cols = image.shape[1]
-    return rows, cols
+    image = read_image(imgpath)
+    if image is not None:
+        return image.shape[0], image.shape[1]
+    return 0, 0
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
