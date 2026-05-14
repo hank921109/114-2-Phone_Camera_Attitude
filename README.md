@@ -15,7 +15,7 @@
 *   **限制**：
     *   **環境**：Python 3.10+ 執行環境。
     *   **優點**：無需特定標定板，利用環境自然線條即可推算姿態與內參。
-    *   **缺點**：在缺乏人工建築（如草地、野外）或線條混亂的環境下精度會下降。
+    *   **缺點**：在缺乏人工建築（如草地、野外）或線條混難的環境下精度會下降。
 
 
 *   **驗證計畫**：
@@ -40,11 +40,11 @@ graph TD
     System --> PS[Pose Solver]
     System --> VI[Visualizer]
 
-    ML --- ML_Desc[Support Image/Video<br/>Memory Pipe Integration]
-    LE --- LE_Desc[Canny & Hough Transform<br/>NEON Optimization]
-    VE --- VE_Desc[RANSAC Algorithm<br/>Vectorized Math]
-    PS --- PS_Desc[Rotation & Focal Solver<br/>Euler Decomposition]
-    VI --- VI_Desc[OpenCV Rendering<br/>3D Axes Overlay]
+    ML --- ML_Desc["Support Image/Video<br/>Memory Pipe Integration"]
+    LE --- LE_Desc["Canny & Hough Transform<br/>NEON Optimization"]
+    VE --- VE_Desc["RANSAC Algorithm<br/>Vectorized Math"]
+    PS --- PS_Desc["Rotation & Focal Solver<br/>Euler Decomposition"]
+    VI --- VI_Desc["OpenCV Rendering<br/>3D Axes Overlay"]
 ```
 
 ### 3. 系統設計
@@ -52,11 +52,11 @@ graph TD
 #### 資料流圖 (DFD)
 ```mermaid
 graph LR
-    Input[Image / Video Frame] -->|ndarray (H,W,3)| LineExt[Line Extractor]
-    LineExt -->|ndarray (N,2,2)| VPEngine[VP Engine: Fast Math Compare]
-    VPEngine -->|list[ndarray(3)], focal:float32| PoseSolver1[Pose Solver: Extrinsic R & Focal f]
-    PoseSolver1 -->|R:ndarray(3,3), f:float32| PoseSolver2[Pose Solver: Euler Decomp]
-    PoseSolver2 -->|attitude:ndarray(3)| Output[Output: OpenCV Rendered]
+    Input[Image / Video Frame] -->| "ndarray (H,W,3)" | LineExt[Line Extractor]
+    LineExt -->| "ndarray (N,2,2)" | VPEngine[VP Engine: Fast Math Compare]
+    VPEngine -->| "list[ndarray(3)], focal:float32" | PoseSolver1[Pose Solver: Extrinsic R & Focal f]
+    PoseSolver1 -->| "R:ndarray(3,3), f:float32" | PoseSolver2[Pose Solver: Euler Decomp]
+    PoseSolver2 -->| "attitude:ndarray(3)" | Output[Output: OpenCV Rendered]
 ```
 
 #### API Table
