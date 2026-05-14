@@ -78,7 +78,7 @@
 
 | 測試影片 (直接播放) | 說明 |
 | :--- | :--- |
-| ![result_v1](data/assets/result_v1.mp4) | 成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。 |
-| ![result_v2](data/assets/result_v2.mp4) | 針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。 |
+| <video src="data/assets/result_v1.mp4" width="320" controls></video> | 成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。 |
+| <video src="data/assets/result_v2.mp4" width="320" controls></video> | 針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。 |
 
 *   **輸出路徑**：`data/assets/result_v1.mp4`, `data/assets/result_v2.mp4`
