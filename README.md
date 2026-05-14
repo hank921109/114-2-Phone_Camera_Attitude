@@ -52,11 +52,11 @@ graph TD
 #### 資料流圖 (DFD)
 ```mermaid
 graph LR
-    Input[Image / Video Frame] -->|ndarray (H,W,3)| LineExt[Line Extractor]
-    LineExt -->|ndarray (N,2,2)| VPEngine[VP Engine: Fast Math Compare]
-    VPEngine -->|list[ndarray(3)], focal:float32| PoseSolver1[Pose Solver: Extrinsic R & Focal f]
-    PoseSolver1 -->|R:ndarray(3,3), f:float32| PoseSolver2[Pose Solver: Euler Decomp]
-    PoseSolver2 -->|attitude:ndarray(3)| Output[Output: OpenCV Rendered]
+    Input[Image / Video Frame] -->|"ndarray (H,W,3)"| LineExt[Line Extractor]
+    LineExt -->|"ndarray (N,2,2)"| VPEngine[VP Engine: Fast Math Compare]
+    VPEngine -->|"list[ndarray(3)], focal:float32"| PoseSolver1[Pose Solver: Extrinsic R & Focal f]
+    PoseSolver1 -->|"R:ndarray(3,3), f:float32"| PoseSolver2[Pose Solver: Euler Decomp]
+    PoseSolver2 -->|"attitude:ndarray(3)"| Output[Output: OpenCV Rendered]
 ```
 
 #### API Table
