@@ -87,10 +87,10 @@ graph LR
 
 **測試影片 1：辦公室走廊**
 *   **說明**：成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。
-*   <video src="results/result_v1.mp4" poster="results/result_v1_preview.png" width="320" controls type="video/mp4"></video>
+*   ![result_v1](results/result_v1.mp4)
 
 **測試影片 2：室內長廊**
 *   **說明**：針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。
-*   <video src="results/result_v2.mp4" poster="results/result_v2_preview.png" width="320" controls type="video/mp4"></video>
+*   ![result_v2](results/result_v2.mp4)
 
 *   **輸出路徑**：`outputs/` (本機產出), `results/` (展示文件)
