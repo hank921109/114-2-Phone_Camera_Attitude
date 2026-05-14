@@ -22,32 +22,40 @@
 *   **測試條件**：輸入包含明顯平行線（如牆角、地磚接縫）的影像。
 *   **期待輸出**：UI 顯示旋轉矩陣與焦距，產出標定結果文字檔，並在影像上視覺化 X, Y, Z 軸。
 *   **測試方法**：
-    1.  **靜態測試**：讀取 `RealTest/` 資料夾下的樣本影像進行標定。
-    2.  **結果比對**：檢查 `RunResult/` 下的 `CalibrationResult.txt` 是否包含合理的姿態角。
+    1.  **靜態測試**：讀取 `data/samples/` 資料夾下的樣本影像進行標定。
+    2.  **結果比對**：檢查 `outputs/` 下的 `*CalibrationResult.txt` 是否包含合理的姿態角。
 
 ---
 
 ### 2. 系統分析 (Analysis)
 
-#### 模組拆解
-| 模組名稱 | 功能描述 | 核心函數 / 技術 |
-| :--- | :--- | :--- |
-| **Media Loader** | 支援影像與影片讀取。整合 **Memory Pipe** 技術。 | `cv2.imread`, `cv2.resize` |
-| **Line Extractor** | 基於 OpenCV 實作，利用 ARM NEON 指令集加速。 | `cv2.Canny`, `cv2.HoughLinesP` |
-| **VP Engine** | RANSAC 演算法優化：向量化餘弦值比較。 | `np.cross`, `np.dot`, `np.linalg.norm` |
-| **Pose Solver** | 構造旋轉矩陣 $R$、推算焦距 $f$。 | `np.transpose`, `math.atan2` |
-| **Visualizer** | **純 OpenCV 渲染架構**。支援動態姿態資訊疊加。 | `cv2.arrowedLine`, `cv2.putText`, `cv2.addWeighted` |
+#### 模組拆解 (Breakdown)
+```mermaid
+graph TD
+    subgraph "Vanishing Point Calibration System"
+        ML[Media Loader<br/>Support Image/Video<br/>Memory Pipe Integration]
+        LE[Line Extractor<br/>Canny & Hough Transform<br/>NEON Optimization]
+        VE[VP Engine<br/>RANSAC Algorithm<br/>Vectorized Math]
+        PS[Pose Solver<br/>Rotation & Focal Solver<br/>Euler Decomposition]
+        VI[Visualizer<br/>OpenCV Rendering<br/>3D Axes Overlay]
+    end
+    
+    ML -->|Frames| LE
+    LE -->|Lines| VE
+    VE -->|Vanishing Points| PS
+    PS -->|Attitude & Focal| VI
+```
 
 ### 3. 系統設計
 
 #### 資料流圖 (DFD)
-```plaintext
-[Image / Video Frame] 
-  -- (ndarray, Memory Pipe) --------> [Line Extractor] 
-  -- (ndarray, (N, 2, 2)) ----------> [VP Engine: Fast Math Compare] 
-  -- (list[ndarray(3,)], float32) --> [Pose Solver: Extrinsic R & Focal f] 
-  -- (ndarray, float32, 3x3) -------> [Pose Solver: Euler Decomp]
-  -- (video / image) ---------------> [Output: OpenCV Rendered]
+```mermaid
+graph LR
+    Input[Image / Video Frame] -->|ndarray, Memory Pipe| LineExt[Line Extractor]
+    LineExt -->|ndarray, N x 2 x 2| VPEngine[VP Engine: Fast Math Compare]
+    VPEngine -->|list of ndarray 3, float32| PoseSolver1[Pose Solver: Extrinsic R & Focal f]
+    PoseSolver1 -->|ndarray, float32, 3x3| PoseSolver2[Pose Solver: Euler Decomp]
+    PoseSolver2 -->|video / image| Output[Output: OpenCV Rendered]
 ```
 
 #### API Table
@@ -58,7 +66,7 @@
 | **VP** | `run_line_ransac()` | lines (ndarray) | best_hypothesis | RANSAC / NumPy |
 | **Pose** | `calculate_camera_attitude()` | R_w2c (ndarray) | attitude (Yaw,P,R) | `math.atan2` |
 | **Draw** | `draw_axes_on_image()` | image, vps, origin | rendered_img | **OpenCV** |
-| **UI** | `setup_ui()` | MainWindow | None | `PyQt5` |
+| **UI** | `Ui_MainWindow` | QMainWindow | None | `PyQt5` |
 
 ---
 
@@ -81,4 +89,4 @@
 | <video src="data/assets/result_v1.mp4" width="320" controls></video> | 成功追蹤辦公室走廊的 X, Y, Z 軸，焦距推算穩定。 |
 | <video src="data/assets/result_v2.mp4" width="320" controls></video> | 針對室內長廊環境，利用天花板與地面平行線條精準定位消失點。 |
 
-*   **輸出路徑**：`data/assets/result_v1.mp4`, `data/assets/result_v2.mp4`
+*   **輸出路徑**：`outputs/` (本機產出), `data/assets/` (展示文件)
