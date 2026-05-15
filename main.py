@@ -2,6 +2,8 @@ import sys
 import os
 import cv2
 import numpy as np
+import time
+from typing import Optional, List
 
 # 將 src 加入路徑
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
@@ -9,16 +11,26 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 try:
     from vp_calib.engine import (
         get_vp_inliers, draw_axes_on_image, calculate_camera_attitude, 
-        choose_vanishing_points, determine_focal_lenth, read_image
+        choose_vanishing_points, determine_focal_length, read_image,
+        calculate_rotation_matrix, AttitudeSmoother, draw_inliers,
+        estimate_origin_from_inliers
     )
-    from vp_calib.gui import Ui_MainWindow
-    from PyQt5 import QtWidgets
 except ImportError as e:
     print(f"Import Error: {e}")
-    print("Please ensure requirements are installed: pip install -r requirements.txt")
     sys.exit(1)
 
-def process_single_image(img_path, output_path=None):
+def save_results(img_path: str, vps: List[np.ndarray], focal: float, attitude: np.ndarray):
+    """將校正結果儲存至文字檔"""
+    img_name = os.path.splitext(os.path.basename(img_path))[0]
+    output_path = os.path.join("outputs", f"{img_name}CalibrationResult.txt")
+    os.makedirs("outputs", exist_ok=True)
+    with open(output_path, "w") as f:
+        f.write(f"VPs: {[v[:2].tolist() for v in vps]}\n")
+        f.write(f"Focal: {focal:.2f}\n")
+        f.write(f"Attitude (Y,P,R): {attitude.tolist()}\n")
+    print(f"Results saved to {output_path}")
+
+def process_single_image(img_path: str, output_path: Optional[str] = None):
     """處理單張影像並儲存/顯示結果"""
     print(f"Processing image: {img_path}")
     frame = read_image(img_path)
@@ -28,120 +40,99 @@ def process_single_image(img_path, output_path=None):
 
     height, width = frame.shape[:2]
     try:
-        inlier_lines_list, hypothesis_list, viz_stuff = get_vp_inliers(
+        # 使用與準確版本一致的參數
+        inliers, hypothesis_list, viz_stuff = get_vp_inliers(
             frame, contrast=1.5, sharpness=2.0, sigma=3, 
-            iterations=800, line_len=30, line_gap=10, threshold=2,
-            processing_width=640
+            iterations=3000, line_len=11, line_gap=7, threshold=2.0,
+            processing_width=960
         )
         
-        # 在畫面上畫軸 (原點設在中心)
-        origin = [width // 2, height // 2]
-        processed_frame = draw_axes_on_image(frame, hypothesis_list, origin, length=height//4)
+        pp = np.array([width/2, height/2])
+        selected_vps = choose_vanishing_points(hypothesis_list, frame)
         
-        vps = choose_vanishing_points(hypothesis_list[0], hypothesis_list[1], hypothesis_list[2], frame)
-        focal = determine_focal_lenth(vps, frame)
+        if len(selected_vps) < 2:
+            print(f"Error: Not enough vanishing points detected for {img_path}")
+            return
+            
+        focal_results = determine_focal_length(selected_vps, frame)
+        focal = focal_results[0]
+        rot_matrix = calculate_rotation_matrix(selected_vps, focal, pp)
+        attitude = calculate_camera_attitude(rot_matrix)
 
+        save_results(img_path, selected_vps, focal, attitude)
+
+        # 1. 先繪製物理線段標記
+        processed_frame = draw_inliers(frame, inliers, viz_stuff[3])
+
+        # 2. 自動估計繪圖原點 (地平線起點)
+        origin = estimate_origin_from_inliers(frame.shape, inliers, viz_stuff[3])
+            
+        processed_frame = draw_axes_on_image(processed_frame, selected_vps, origin, length=height//4, attitude=attitude)
+        
         if focal:
-            cv2.putText(processed_frame, f"Focal: {focal[0]:.1f}", (50, 50), 
+            cv2.putText(processed_frame, f"Focal: {focal:.1f}", (width - 300, 100), 
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
         
         if output_path:
-            cv2.imwrite(output_path, processed_frame)
+            cv2.imwrite(output_path, cv2.cvtColor(processed_frame, cv2.COLOR_RGB2BGR))
             print(f"Result saved to {output_path}")
         else:
-            cv2.imshow("Calibration Result", processed_frame)
+            cv2.imshow("Calibration Result", cv2.cvtColor(processed_frame, cv2.COLOR_RGB2BGR))
             cv2.waitKey(0)
             cv2.destroyAllWindows()
-            
     except Exception as e:
         print(f"Error processing image: {e}")
 
-def process_video(video_path, output_path, stride=5):
-    """處理影片並輸出視覺化結果"""
+def process_video(video_path: str, output_path: str, stride: int = 2):
     cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        print(f"Error opening video file {video_path}")
-        return
-
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    if not cap.isOpened(): return
+    width, height = int(cap.get(3)), int(cap.get(4))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    # 使用 mp4v 編碼器
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_path, fourcc, fps / stride, (width, height))
-
+    smoother = AttitudeSmoother(alpha=0.3)
+    out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps / stride, (width, height))
     count = 0
-    print(f"Processing video: {video_path} ({total_frames} frames)...")
-
     while cap.isOpened():
         ret, frame = cap.read()
-        if not ret:
-            break
-
+        if not ret: break
         if count % stride == 0:
+            start_time = time.time()
             try:
-                inlier_lines_list, hypothesis_list, viz_stuff = get_vp_inliers(
-                    frame, contrast=1.5, sharpness=2.0, sigma=3, 
-                    iterations=800, line_len=30, line_gap=10, threshold=2,
-                    processing_width=640
-                )
-                
-                origin = [width // 2, height // 2]
-                processed_frame = draw_axes_on_image(frame, hypothesis_list, origin, length=height//4)
-                
-                vps = choose_vanishing_points(hypothesis_list[0], hypothesis_list[1], hypothesis_list[2], frame)
-                focal = determine_focal_lenth(vps, frame)
-                
-                cv2.putText(processed_frame, f"Frame: {count}", (50, 50), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                if focal:
-                    cv2.putText(processed_frame, f"Focal: {focal[0]:.1f}", (50, 100), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                in_masks, hyp_list, viz = get_vp_inliers(frame_rgb, 1.5, 2.0, 3, 1000, 30, 10, 2.0, 800)
+                vps = choose_vanishing_points(hyp_list, frame)
+                if len(vps) >= 2:
+                    f = determine_focal_length(vps, frame)[0]
+                    att = calculate_camera_attitude(calculate_rotation_matrix(vps, f, [width/2, height/2]))
+                    att = smoother.smooth(att)
+                    # 影片繪製原點設在中心
+                    processed_frame = draw_inliers(frame, in_masks, viz[3])
+                    processed_frame = draw_axes_on_image(processed_frame, vps, [width//2, height//2], length=height//4, attitude=att)
+                else:
+                    processed_frame = frame
+                proc_fps = 1.0 / (time.time() - start_time) if (time.time() - start_time) > 0 else 0
+                cv2.putText(processed_frame, f"Proc FPS: {proc_fps:.1f}", (20, 360), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
                 out.write(processed_frame)
-                print(f"Processed frame {count}/{total_frames}", end='\r')
-            except Exception as e:
-                print(f"\nError processing frame {count}: {e}")
-                out.write(frame)
-        
+            except: out.write(frame)
         count += 1
-        # 測試用，可調整
-        if count > 200: 
-            break
-
-    cap.release()
-    out.release()
-    print(f"\nFinished. Video saved to {output_path}")
-
-def is_video(path):
-    video_exts = ['.mp4', '.avi', '.mov', '.mkv']
-    return os.path.splitext(path)[1].lower() in video_exts
+        if count > 500: break
+    cap.release(); out.release()
 
 def main():
     if len(sys.argv) > 1:
         input_path = sys.argv[1]
-        if not os.path.exists(input_path):
-            print(f"File not found: {input_path}")
-            return
-
+        if not os.path.exists(input_path): return
         os.makedirs("outputs", exist_ok=True)
-        filename = os.path.basename(input_path)
-        output_path = os.path.join("outputs", f"result_{filename}")
-
-        if is_video(input_path):
+        output_path = os.path.join("outputs", f"result_{os.path.basename(input_path)}")
+        if os.path.splitext(input_path)[1].lower() in ['.mp4', '.avi', '.mov']:
             process_video(input_path, output_path, stride=5)
         else:
             process_single_image(input_path, output_path)
     else:
-        # 無參數則啟動 GUI
-        app = QtWidgets.QApplication(sys.argv)
-        MainWindow = QtWidgets.QMainWindow()
-        ui = Ui_MainWindow()
-        ui.setupUi(MainWindow)
-        MainWindow.show()
-        sys.exit(app.exec_())
+        try:
+            from vp_calib.gui import CalibrationApp
+            from PyQt5 import QtWidgets
+            app = QtWidgets.QApplication(sys.argv)
+            window = CalibrationApp(); window.show(); sys.exit(app.exec_())
+        except ImportError: pass
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()

@@ -1,171 +1,145 @@
 import sys
 import cv2
+import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
+from typing import Optional, Tuple
 from vp_calib.engine import main as calib_main, read_image
 
-class Ui_MainWindow(object):
-    def __init__(self):       
-        super(Ui_MainWindow, self).__init__()
+class CalibrationApp(QtWidgets.QMainWindow):
+    """
+    Main GUI application for Vanishing Point Camera Calibration.
+    Refactored to avoid global variables and follow PEP 8.
+    """
+    def __init__(self):
+        super(CalibrationApp, self).__init__()
+        self.img_name: Optional[str] = None
+        self.rows_prop: float = 1.0
+        self.cols_prop: float = 1.0
+        self.origin_x: float = 0.0
+        self.origin_y: float = 0.0
+        self.camera_h: float = 0.0
         
-    def setupUi(self, MainWindow):
-        # Mainwindow
-        MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(1250, 635)
-        self.centralwidget = QtWidgets.QWidget(MainWindow)
-        self.centralwidget.setObjectName("centralwidget")
-        # pushButton_openImage
-        self.pushButton_openImage = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_openImage.setGeometry(QtCore.QRect(815, 10, 430, 50))
-        self.pushButton_openImage.setObjectName("pushButton_openImage")
-        # input height of camera
-        self.heightLable = QtWidgets.QLabel(self.centralwidget)
-        self.heightLable.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        self.heightLable.setGeometry(QtCore.QRect(950, 130, 295, 30))
-        self.heightButton = QtWidgets.QPushButton(self.centralwidget)
-        self.heightButton.setGeometry(QtCore.QRect(815, 70, 430, 50))
-        self.heightButton.setObjectName("Input Height")
-        # choose a ground point
-        self.label_note = QtWidgets.QLabel(self.centralwidget)
-        self.label_note.setGeometry(QtCore.QRect(820, 150, 430, 50))
-        self.label_x = QtWidgets.QLabel(self.centralwidget)
-        self.label_x.setGeometry(QtCore.QRect(820, 180, 430, 50))
-        self.xLable = QtWidgets.QLabel(self.centralwidget)
-        self.xLable.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        self.xLable.setGeometry(QtCore.QRect(1000, 190, 245, 29))
-        self.label_y = QtWidgets.QLabel(self.centralwidget)
-        self.label_y.setGeometry(QtCore.QRect(820, 210, 430, 50))
-        self.yLable = QtWidgets.QLabel(self.centralwidget)
-        self.yLable.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        self.yLable.setGeometry(QtCore.QRect(1000, 220, 245, 29))
-        # pushButton_Calibration
-        self.pushButton_Calibration = QtWidgets.QPushButton(self.centralwidget)
-        self.pushButton_Calibration.setGeometry(QtCore.QRect(815, 260, 430, 50))
-        self.pushButton_Calibration.setObjectName("pushButton_Calibration")
-        # label_image
+        self.setup_ui()
+
+    def setup_ui(self):
+        self.setObjectName("MainWindow")
+        self.setWindowTitle("Vanishing Point Camera Calibration")
+        self.resize(1250, 680)
+        
+        self.centralwidget = QtWidgets.QWidget(self)
+        self.setCentralWidget(self.centralwidget)
+        
+        # Left: Image Display
         self.label_image = QtWidgets.QLabel(self.centralwidget)
         self.label_image.setGeometry(QtCore.QRect(10, 10, 800, 600))
         self.label_image.setFrameShape(QtWidgets.QFrame.Box)
-        self.label_image.setObjectName("label_image")
         self.label_image.setScaledContents(True)
-        # label_height
-        self.label_height = QtWidgets.QLabel(self.centralwidget)
-        self.label_height.setGeometry(QtCore.QRect(820, 120, 430, 50))
-        # results:
-        self.label_assume = QtWidgets.QLabel(self.centralwidget)
-        self.label_assume.setGeometry(QtCore.QRect(820, 300, 430, 50))
-        # f
-        self.label_f = QtWidgets.QLabel(self.centralwidget)
-        self.label_f.setGeometry(QtCore.QRect(820, 325, 430, 50))
-        self.fLable = QtWidgets.QLabel(self.centralwidget)
-        self.fLable.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        self.fLable.setGeometry(QtCore.QRect(820, 365, 425, 30))
-        # r
-        self.label_r = QtWidgets.QLabel(self.centralwidget)
-        self.label_r.setGeometry(QtCore.QRect(820, 400, 430, 50))
-        self.rLable = QtWidgets.QLabel(self.centralwidget)
-        self.rLable.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        self.rLable.setGeometry(QtCore.QRect(820, 440, 425, 100))
-        # t
-        self.label_t = QtWidgets.QLabel(self.centralwidget)
-        self.label_t.setGeometry(QtCore.QRect(820, 540, 430, 50))
-        self.tLable = QtWidgets.QLabel(self.centralwidget)
-        self.tLable.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Plain)
-        self.tLable.setGeometry(QtCore.QRect(820, 580, 425, 30))
-        # menubar and statusbar
-        MainWindow.setCentralWidget(self.centralwidget)
-        self.menubar = QtWidgets.QMenuBar(MainWindow)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 775, 26))
-        self.menubar.setObjectName("menubar")
-        MainWindow.setMenuBar(self.menubar)
-        self.statusbar = QtWidgets.QStatusBar(MainWindow)
-        self.statusbar.setObjectName("statusbar")
-        MainWindow.setStatusBar(self.statusbar)
-        # show name
-        self.retranslateUi(MainWindow)
-        QtCore.QMetaObject.connectSlotsByName(MainWindow)
-        # clicked event
-        self.pushButton_openImage.clicked.connect(self.openImage)
-        self.pushButton_Calibration.clicked.connect(self.calibrationCamera)
-        self.heightButton.clicked.connect(self.inputHeight)
-
-    def retranslateUi(self, MainWindow):
-        _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", 'Vanishing Point Camera Calibration'))
-        self.pushButton_openImage.setText(_translate("MainWindow", "Open Image"))
-        self.pushButton_Calibration.setText(_translate("MainWindow", "Calibration"))
-        self.heightButton.setText(_translate("MainWindow", "Input Height"))
-        # self.heightLable.setText(_translate("MainWindow", "0"))
-        self.label_height.setText(_translate("MainWindow", "Camera Height:"))
-        self.label_note.setText(_translate("MainWindow", "(Please choose a point on the ground as origin point.)"))
-        self.label_x.setText(_translate("MainWindow", "Point u in image (px):"))
-        self.label_y.setText(_translate("MainWindow", "Point v in image (px):"))
-        # self.xLable.setText(_translate("MainWindow", "0"))
-        # self.yLable.setText(_translate("MainWindow", "0"))
-        self.label_assume.setText(_translate("MainWindow", "(1.No distortion. 2.Principal point in the center.)"))
-        self.label_f.setText(_translate("MainWindow", "Focal (px):"))
-        self.label_r.setText(_translate("MainWindow", "Rotation:"))
-        self.label_t.setText(_translate("MainWindow", "Translation (m):"))
-
-    def openImage(self):  
-        global imgName
-        global rows_prop
-        global cols_prop
-        imgName = QtWidgets.QFileDialog.getOpenFileName(self.centralwidget, "Choose Image", "data/samples/", "*.jpg;;*.png;;All Files(*)")[0]
-        if not imgName:
-            return
-        jpg = QtGui.QPixmap(imgName).scaled(self.label_image.width(), self.label_image.height())
-        self.label_image.setPixmap(jpg)
         
-        # 使用優化後的讀取方式
-        image = read_image(imgName)
-        if image is not None:
-            rows, cols = image.shape[:2]
-            rows_prop = rows / self.label_image.height()
-            cols_prop = cols / self.label_image.width()
-            self.label_image.mousePressEvent = self.getPos
+        # Right: Controls
+        self.btn_open = QtWidgets.QPushButton("Open Image", self.centralwidget)
+        self.btn_open.setGeometry(QtCore.QRect(815, 10, 430, 50))
+        self.btn_open.clicked.connect(self.handle_open_image)
+        
+        self.btn_height = QtWidgets.QPushButton("Input Camera Height", self.centralwidget)
+        self.btn_height.setGeometry(QtCore.QRect(815, 70, 430, 50))
+        self.btn_height.clicked.connect(self.handle_input_height)
+        
+        self.lbl_height_val = QtWidgets.QLabel("Height: 0.0 m", self.centralwidget)
+        self.lbl_height_val.setGeometry(QtCore.QRect(820, 125, 420, 30))
+        self.lbl_height_val.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Sunken)
 
-    def inputHeight(self):
-        global h
-        h, ok = QtWidgets.QInputDialog.getDouble(self.centralwidget, "Camera Height", "Please input camera height：", 0, 0, 20, 4)
-        if ok :
-            self.heightLable.setText(str(h))
+        self.lbl_pos_info = QtWidgets.QLabel("(Click image to set origin point)", self.centralwidget)
+        self.lbl_pos_info.setGeometry(QtCore.QRect(820, 160, 430, 30))
+        
+        self.lbl_origin_coords = QtWidgets.QLabel("Origin (px): X=0.0, Y=0.0", self.centralwidget)
+        self.lbl_origin_coords.setGeometry(QtCore.QRect(820, 195, 420, 30))
+        self.lbl_origin_coords.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Sunken)
+        
+        self.btn_calibrate = QtWidgets.QPushButton("Start Calibration", self.centralwidget)
+        self.btn_calibrate.setGeometry(QtCore.QRect(815, 250, 430, 50))
+        self.btn_calibrate.clicked.connect(self.handle_calibration)
+        
+        # Results Section
+        self.lbl_results_header = QtWidgets.QLabel("Results:", self.centralwidget)
+        self.lbl_results_header.setGeometry(QtCore.QRect(820, 310, 430, 30))
+        self.lbl_results_header.setStyleSheet("font-weight: bold;")
+        
+        self.lbl_focal = QtWidgets.QLabel("Focal (px): -", self.centralwidget)
+        self.lbl_focal.setGeometry(QtCore.QRect(820, 345, 425, 30))
+        self.lbl_focal.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Sunken)
+        
+        self.lbl_rotation = QtWidgets.QLabel("Rotation Matrix:\n-", self.centralwidget)
+        self.lbl_rotation.setGeometry(QtCore.QRect(820, 385, 425, 120))
+        self.lbl_rotation.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Sunken)
+        self.lbl_rotation.setWordWrap(True)
+        
+        self.lbl_translation = QtWidgets.QLabel("Translation (m): -", self.centralwidget)
+        self.lbl_translation.setGeometry(QtCore.QRect(820, 515, 425, 30))
+        self.lbl_translation.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Sunken)
 
-    def getPos(self, event):
-        global x
-        global y
-        global rows_prop
-        global cols_prop
-        x = event.pos().x() * cols_prop
-        y = event.pos().y() * rows_prop
-        _translate = QtCore.QCoreApplication.translate
-        self.xLable.setText(_translate("MainWindow", str(x)))
-        self.yLable.setText(_translate("MainWindow", str(y)))
+        self.statusbar = QtWidgets.QStatusBar(self)
+        self.setStatusBar(self.statusbar)
 
-    def calibrationCamera(self):
-        global imgName, x, y, h
-        try:
-            px_x, px_y, cam_h = x, y, h
-        except NameError:
-            QtWidgets.QMessageBox.warning(self.centralwidget, "Warning", "Please select origin point and input height first!")
+    def handle_open_image(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Choose Image", "data/samples/", "*.jpg;;*.png;;All Files(*)"
+        )
+        if not path:
             return
             
-        # 使用 Raspi 優化後的參數調用
-        F, M, V = calib_main(imgName, px_x, px_y, cam_h, iterations=800)
-        _translate = QtCore.QCoreApplication.translate
-        self.fLable.setText(_translate("MainWindow", f"{F[0]:.2f}" if (isinstance(F, list) and len(F)>0) else str(F)))
-        self.rLable.setText(_translate("MainWindow", str(M[0])))
-        self.tLable.setText(_translate("MainWindow", str(V[0])))
+        self.img_name = path
+        pixmap = QtGui.QPixmap(path).scaled(self.label_image.width(), self.label_image.height())
+        self.label_image.setPixmap(pixmap)
+        
+        image = read_image(path)
+        if image is not None:
+            rows, cols = image.shape[:2]
+            self.rows_prop = rows / self.label_image.height()
+            self.cols_prop = cols / self.label_image.width()
+            self.label_image.mousePressEvent = self.handle_mouse_click
+            self.statusbar.showMessage(f"Loaded: {path}")
 
-def image_read(imgpath):
-    image = read_image(imgpath)
-    if image is not None:
-        return image.shape[0], image.shape[1]
-    return 0, 0
+    def handle_input_height(self):
+        val, ok = QtWidgets.QInputDialog.getDouble(self, "Camera Height", "Input height (meters):", 1.5, 0, 100, 2)
+        if ok:
+            self.camera_h = val
+            self.lbl_height_val.setText(f"Height: {val:.2f} m")
+
+    def handle_mouse_click(self, event):
+        self.origin_x = event.pos().x() * self.cols_prop
+        self.origin_y = event.pos().y() * self.rows_prop
+        self.lbl_origin_coords.setText(f"Origin (px): X={self.origin_x:.1f}, Y={self.origin_y:.1f}")
+
+    def handle_calibration(self):
+        if not self.img_name:
+            QtWidgets.QMessageBox.warning(self, "Warning", "Please open an image first!")
+            return
+        if self.camera_h <= 0:
+            QtWidgets.QMessageBox.warning(self, "Warning", "Please input a valid camera height!")
+            return
+            
+        self.statusbar.showMessage("Calibrating... please wait.")
+        QtWidgets.QApplication.processEvents()
+        
+        try:
+            focal, rot_matrix, trans_vec = calib_main(
+                self.img_name, self.origin_x, self.origin_y, self.camera_h, iterations=1000
+            )
+            
+            self.lbl_focal.setText(f"Focal (px): {focal:.2f}")
+            self.lbl_rotation.setText(f"Rotation Matrix:\n{np.array2string(rot_matrix, precision=4)}")
+            self.lbl_translation.setText(f"Translation (m): {np.array2string(trans_vec, precision=4)}")
+            self.statusbar.showMessage("Calibration complete.")
+            
+            # Show a message box with the result
+            QtWidgets.QMessageBox.information(self, "Success", f"Calibration Finished!\nFocal: {focal:.1f} px")
+            
+        except Exception as e:
+            self.statusbar.showMessage("Calibration failed.")
+            QtWidgets.QMessageBox.critical(self, "Error", f"An error occurred during calibration:\n{str(e)}")
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
-    obj = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow()
-    ui.setupUi(obj)
-    obj.show()
+    window = CalibrationApp()
+    window.show()
     sys.exit(app.exec_())
