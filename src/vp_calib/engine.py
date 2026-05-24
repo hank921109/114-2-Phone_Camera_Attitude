@@ -19,7 +19,14 @@ def get_hough_lines_cv(image: np.ndarray, line_length: int, line_gap: int) -> Tu
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     else:
         gray = image
-    edges = cv2.Canny(gray, 40, 120, apertureSize=3)
+        
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray_clahe = clahe.apply(gray)
+    
+    high_thresh, _ = cv2.threshold(gray_clahe, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    low_thresh = 0.5 * high_thresh
+    edges = cv2.Canny(gray_clahe, low_thresh, high_thresh, apertureSize=3)
+    
     lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, 
                             minLineLength=line_length, maxLineGap=line_gap)
     if lines is None: return np.array([]), edges
@@ -67,8 +74,8 @@ def estimate_origin_from_inliers(image_shape: Tuple[int, ...], inlier_masks: Lis
             pt = np.cross(L1, L2)
             if abs(pt[2]) > 1e-9:
                 pt /= pt[2]
-                # 交點必須在合理範圍內
-                if 0 <= pt[0] <= w and h * 0.3 <= pt[1] < h - 10:
+                # 交點必須在合理範圍內 (放寬至畫面邊緣與下方)
+                if -w * 0.2 <= pt[0] <= w * 1.2 and h * 0.2 <= pt[1] <= h * 1.2:
                     intersections.append(pt[:2])
     
     if not intersections:
@@ -172,13 +179,28 @@ def get_vp_inliers(image_input: Any, contrast: float, sharpness: float, sigma: f
     enhanced_img = image_enhance(image_small, contrast, sharpness)
     lines_small, edges_small = get_hough_lines_cv(enhanced_img, line_len, line_gap)
     if lines_small.size == 0: return [], [], [full_image, enhanced_img, edges_small, np.array([])]
-    
-    _, i1 = run_vectorized_ransac(lines_small, iterations, threshold)
-    ignore = i1 if i1 is not None else np.zeros(len(lines_small), dtype=bool)
-    _, i2 = run_vectorized_ransac(lines_small, iterations, threshold, ignore_mask=ignore)
-    ignore = np.logical_or(ignore, i2) if i2 is not None else ignore
-    _, i3 = run_vectorized_ransac(lines_small, iterations, threshold, ignore_mask=ignore)
-    
+
+    # Calculate angle to partition into steep (vertical) and shallow (horizontal)
+    dy = np.abs(lines_small[:, 1, 1] - lines_small[:, 0, 1])
+    dx = np.abs(lines_small[:, 1, 0] - lines_small[:, 0, 0])
+    # Vertical lines (steeper than 60 degrees)
+    v_mask = dy > dx * 1.732
+
+    # 1. Z-axis: Force to pick from steep lines
+    ignore_z = ~v_mask
+    _, i1 = run_vectorized_ransac(lines_small, iterations, threshold, ignore_mask=ignore_z)
+    if i1 is None: i1 = np.zeros(len(lines_small), dtype=bool)
+
+    # 2. X-axis: Pick from shallow lines
+    ignore_x = v_mask | i1
+    _, i2 = run_vectorized_ransac(lines_small, iterations, threshold, ignore_mask=ignore_x)
+    if i2 is None: i2 = np.zeros(len(lines_small), dtype=bool)
+
+    # 3. Y-axis: Pick from remaining shallow lines
+    ignore_y = ignore_x | i2
+    _, i3 = run_vectorized_ransac(lines_small, iterations, threshold, ignore_mask=ignore_y)
+    if i3 is None: i3 = np.zeros(len(lines_small), dtype=bool)
+
     def r_r(m, s):
         if m is None or np.sum(m) < 2: return np.array([0, 0, 1.0])
         v_s = refine_vp_svd(lines_small[m])

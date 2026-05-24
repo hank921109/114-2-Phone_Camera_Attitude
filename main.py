@@ -42,11 +42,10 @@ def process_single_image(img_path: str, output_path: Optional[str] = None):
     try:
         # 使用與準確版本一致的參數
         inliers, hypothesis_list, viz_stuff = get_vp_inliers(
-            frame, contrast=1.5, sharpness=2.0, sigma=3, 
-            iterations=3000, line_len=11, line_gap=7, threshold=2.0,
+            frame, contrast=1.5, sharpness=2.0, sigma=3,
+            iterations=3000, line_len=60, line_gap=15, threshold=2.0,
             processing_width=960
-        )
-        
+        )        
         pp = np.array([width/2, height/2])
         selected_vps = choose_vanishing_points(hypothesis_list, frame)
         
