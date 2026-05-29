@@ -11,13 +11,15 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 try:
     from vp_calib.engine import (
         get_vp_inliers, draw_axes_on_image, calculate_camera_attitude, 
-        choose_vanishing_points, determine_focal_length, read_image,
-        calculate_rotation_matrix, AttitudeSmoother, draw_inliers,
+        determine_focal_length, read_image,
+        calculate_rotation_matrix, draw_inliers,
         estimate_origin_from_inliers
     )
 except ImportError as e:
     print(f"Import Error: {e}")
     sys.exit(1)
+
+
 
 def save_results(img_path: str, vps: List[np.ndarray], focal: float, attitude: np.ndarray):
     """將校正結果儲存至文字檔"""
@@ -41,17 +43,17 @@ def process_single_image(img_path: str, output_path: Optional[str] = None):
     height, width = frame.shape[:2]
     try:
         # 使用與準確版本一致的參數
-        inliers, hypothesis_list, viz_stuff = get_vp_inliers(
+        inliers, selected_vps, viz_stuff = get_vp_inliers(
             frame, contrast=1.5, sharpness=2.0, sigma=3,
             iterations=3000, line_len=60, line_gap=15, threshold=2.0,
             processing_width=960
         )        
         pp = np.array([width/2, height/2])
-        selected_vps = choose_vanishing_points(hypothesis_list, frame)
         
         if len(selected_vps) < 2:
             print(f"Error: Not enough vanishing points detected for {img_path}")
             return
+
             
         focal_results = determine_focal_length(selected_vps, frame)
         focal = focal_results[0]
@@ -87,7 +89,6 @@ def process_video(video_path: str, output_path: str, stride: int = 2):
     if not cap.isOpened(): return
     width, height = int(cap.get(3)), int(cap.get(4))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    smoother = AttitudeSmoother(alpha=0.3)
     out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'mp4v'), fps / stride, (width, height))
     count = 0
     while cap.isOpened():
@@ -97,15 +98,12 @@ def process_video(video_path: str, output_path: str, stride: int = 2):
             start_time = time.time()
             try:
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                in_masks, hyp_list, viz = get_vp_inliers(frame_rgb, 1.5, 2.0, 3, 1000, 30, 10, 2.0, 800)
-                vps = choose_vanishing_points(hyp_list, frame)
+                in_masks, vps, viz = get_vp_inliers(frame_rgb, 1.2, 1.5, 2.0, 1000, 30, 10, 2.0, 800)
                 if len(vps) >= 2:
                     f = determine_focal_length(vps, frame)[0]
                     att = calculate_camera_attitude(calculate_rotation_matrix(vps, f, [width/2, height/2]))
-                    att = smoother.smooth(att)
                     # 影片繪製原點設在中心
-                    processed_frame = draw_inliers(frame, in_masks, viz[3])
-                    processed_frame = draw_axes_on_image(processed_frame, vps, [width//2, height//2], length=height//4, attitude=att)
+                    processed_frame = draw_axes_on_image(frame, vps, [width//2, height//2], length=height//4, attitude=att)
                 else:
                     processed_frame = frame
                 proc_fps = 1.0 / (time.time() - start_time) if (time.time() - start_time) > 0 else 0
@@ -115,6 +113,7 @@ def process_video(video_path: str, output_path: str, stride: int = 2):
         count += 1
         if count > 500: break
     cap.release(); out.release()
+
 
 def main():
     if len(sys.argv) > 1:
