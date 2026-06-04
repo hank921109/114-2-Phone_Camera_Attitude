@@ -30,7 +30,7 @@
    改良SOP，以便你下次更快了解此專案
    
    
-   @README.md 1.  #### 模組拆解 (Breakdown) 請改為 算法的名稱，ex： Canny,    
+   @README.md 1.  #### 模組拆解 (Breakdown) 請改為 算法的名稱，ex： CAAHE,HSV , ...    
    Hough, RANSEC, ...  2. #### 模組拆解 (Breakdown) 的後方追加 每個算法的     
    What , why, how ，以表格呈現
  
