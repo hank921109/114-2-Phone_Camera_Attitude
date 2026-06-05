@@ -5,11 +5,7 @@ import time
 
 # 針對本地 samples 的預期值 (Pitch 應趨近於 0)
 # 格式: {文件名: [Yaw, Pitch, Roll]}
-EXPECTED_ATT = {
-    "rt1.jpg": [0, 0, 0], 
-    "rt4.jpg": [0, 0, 0],
-    "rt7.jpg": [0, 0, 0]
-}
+EXPECTED_ATT = {f"rt{i}.jpg": [0, 0, 0] for i in range(8)}
 
 def parse_system_output(file_path):
     if not os.path.exists(file_path): return None
@@ -20,7 +16,7 @@ def parse_system_output(file_path):
                 return np.fromstring(val_str, sep=',')
     return None
 
-samples = ["rt1.jpg", "rt4.jpg", "rt7.jpg"]
+samples = [f"rt{i}.jpg" for i in range(8)]
 errors = []
 latencies = []
 

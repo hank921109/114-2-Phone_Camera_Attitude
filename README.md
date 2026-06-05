@@ -47,14 +47,14 @@ graph TD
 
 | 核心演算法 (Algorithm) | What (演算法內容) | Why (設計目的) | How (實作方式) |
 | :--- | :--- | :--- | :--- |
-| **CLAHE** | 限制對比度自適應直方圖均衡化 | 增強影像局部對比度，提取陰影或過曝區域的隱藏邊緣 | 將影像分割為 8x8 局部區塊進行直方圖均衡，並限制對比度增益 |
-| **Gaussian Blur** | 高斯平滑濾波 | 消除影像中的高頻噪點，防止邊緣檢測產生碎片化 | 利用 5x5 高斯核對影像執行卷積運算，在保留主邊緣的同時平滑背景雜訊 |
+| **CLAHE** | 限制對比度自適應直方圖均衡化 | 增強影像局部對比度，提取陰影或過曝區域的邊緣 | 將影像分割為 8x8 局部區塊進行直方圖均衡，並限制對比度增益 |
+| **Gaussian Blur** | 高斯平滑濾波 | 消除影像中的高頻噪點，防止邊緣檢測產生碎片化 | 利用 5x5 高斯核對影像執行卷積運算，在保留邊緣的同時平滑背景雜訊 |
 | **Otsu's Binarization** | 大津演算法自動門檻控制 | 為邊緣檢測尋找全域最佳二值化門檻 | 計算影像直方圖，最大化類間變異數以分離背景與前景結構 |
 | **Adaptive Canny** | 自適應邊緣檢測演算法 | 提取不同光影環境下的結構化輪廓 | 結合 Otsu 門檻動態調整 Canny 的遲滯門檻 (Hysteresis Thresholding) |
-| **Probabilistic Hough** | 機率霍夫變換線段偵測 | 將邊緣點群聚合為向量化的幾何線段 | 透過 `minLineLength` 過濾細碎雜訊，保留建築與車道線主結構 |
+| **Probabilistic Hough** | 機率霍夫變換線段偵測 | 將邊緣點群聚合為向量化的幾何線段 | 透過 `minLineLength` 過濾細碎雜訊，保留建築與車道線結構 |
 | **Vectorized RANSAC** | 矩陣化隨機抽樣一致演算法 | 從帶雜訊的線段池中篩選出消失點的有效線段 | 利用 NumPy 廣播機制一次生成數千組假設，提升運算效能 |
-| **Singular Value SVD** | 奇異值分解矩陣運算 | 從投票後的 Inlier 線段集中解出精確的亞像素交點 | 建立超定齊次方程組，提取最小奇異值對應之特徵向量作為消失點座標 |
-| **Manhattan World Ortho** | 曼哈頓世界正交化約束 | 確保三軸消失點在物理空間中嚴格互相垂直 | 透過 Cross Product 執行二次正交校準，確保旋轉矩陣之正規性 |
+| **Singular Value SVD** | 奇異值分解矩陣運算 | 從投票後的 Inlier 線段集中解出亞像素交點 | 建立超定齊次方程組，提取最小奇異值對應之特徵向量作為消失點座標 |
+| **Manhattan World Ortho** | 曼哈頓世界正交化約束 | 確保三軸消失點在物理空間中互相垂直 | 透過 Cross Product 執行二次正交校準，確保旋轉矩陣之正規性 |
 | **Euler Decomposition** | 歐拉角分解演算法 | 從旋轉矩陣中提取 Yaw, Pitch, Roll 指標 | 基於相機座標系 (Z-Forward)，利用 atan2 函數處理矩陣項之比例關係 |
 
 ---
@@ -64,27 +64,28 @@ graph TD
 #### 資料流圖 (DFD)
 ```mermaid
 graph LR
-    Img[Image/Frame] --> ML[Media Loader]
-    ML --> ROI[Line Extractor: Semantic Filtering]
-    ROI --> Line[Line Extractor: Feature Extraction]
-    Line --> DS[VP Engine: Dual-Source Decoupling]
-    DS --> RANSAC[VP Engine: RANSAC Solver]
-    RANSAC --> SVD[VP Engine: SVD Refinement]
-    SVD --> Ortho[Pose Solver: Double Orthogonalization]
-    Ortho --> Pose[Pose Solver: Euler Angle Decomposer]
-    Pose --> Render[Visualizer: Adaptive Rendering]
-    Render --> Out[Rendered Output]
+    Img[Image/Frame] -- "Raw Image (Mat)" --> ML[Media Loader]
+    ML -- "Preprocessed Image (Mat)" --> ROI[Line Extractor: Semantic Filtering]
+    ROI -- "Filtered Edge Map (Mat)" --> Line[Line Extractor: Feature Extraction]
+    Line -- "Detected Lines (Array)" --> DS[VP Engine: Dual-Source Decoupling]
+    DS -- "Decoupled Line Pools (List)" --> RANSAC[VP Engine: RANSAC Solver]
+    RANSAC -- "Inlier Line Segments (Array)" --> SVD[VP Engine: SVD Refinement]
+    SVD -- "Vanishing Points (Array 3x3)" --> Ortho[Pose Solver: Double Orthogonalization]
+    Ortho -- "Rotation Matrix (Mat 3x3)" --> Pose[Pose Solver: Euler Angle Decomposer]
+    Pose -- "Euler Angles (Vector3)" --> Render[Visualizer: Adaptive Rendering]
+    Render -- "Annotated Image (Mat)" --> Out[Rendered Output]
 ```
+![Pipeline Inliers](docs/images/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
 
 #### 演算法優化紀錄 (5/29)
-針對 KITTI 道路場景中「樹葉雜訊干擾 RANSAC」與「座標軸漂移」問題，進行了以下重大改良：
+針對 KITTI 道路場景中「樹葉雜訊干擾 RANSAC」與「座標軸漂移」問題，進行了以下演算法優化：
 *   **語意解耦標定 (Decoupled Dual-Source)**：
     *   **What**: 將線段池拆分為「建築池（垂直線）」與「路面池（車道線）」。
-    *   **Why**: 避免道路兩側的樹木產生雜亂邊緣干擾 Yaw 估計。
+    *   **Why**: 避免道路兩側的樹木產生邊緣干擾 Yaw 估計。
     *   **How**: 利用建築垂直線鎖定重力基準，利用車道線校準前進方向。
 *   **二次正交修正 (Double Orthogonalization)**：
     *   **What**: 在 Pose Solver 階段執行兩次交叉乘積校正。
-    *   **Why**: 確保 $X \perp Y \perp Z$ 嚴格成立，消除單幀標定導致的座標軸歪斜。
+    *   **Why**: 確保 $X \perp Y \perp Z$ 成立，消除單幀標定導致的座標軸歪斜。
 
 #### API Table
 | 模組 | 函數名稱 | 改良重點 | 核心描述 |
@@ -101,6 +102,13 @@ graph LR
 #### 4.1 GUI 交互界面
 ![GUI Interface](docs/images/gui_interface.png) 
 
+### 室內圖像
+| ![rt0](docs/images/result_rt0.jpg) | ![rt1](docs/images/result_rt1.jpg) | ![rt2](docs/images/result_rt2.jpg) | ![rt3](docs/images/result_rt3.jpg) |
+| :---: | :---: | :---: | :---: |
+| **Indoor: rt0** | **Indoor: rt1** | **Indoor: rt2** | **Indoor: rt3** |
+| ![rt4](docs/images/result_rt4.jpg) | ![rt5](docs/images/result_rt5.jpg) | ![rt6](docs/images/result_rt6.jpg) | ![rt7](docs/images/result_rt7.jpg) |
+| **Indoor: rt4** | **Indoor: rt5** | **Indoor: rt6** | **Indoor: rt7** |
+
 #### 4.2 KITTI 道路實測成果 (Dynamic Sequences)
 
 | ![result_000000](docs/images/result_000000.png) | ![result_000001](docs/images/result_000001.png) | ![result_000008](docs/images/result_000008.png) |
@@ -113,8 +121,8 @@ graph LR
 
 | 測試維度 | 相對絕對誤差 (Relative MAE) | 穩定度評估 |
 | :--- | :--- | :--- |
-| **Pitch (俯仰)** | **0.113°** | **誤差收斂於 0.15° 內**，精確捕捉坡度微變 |
-| **Yaw (偏航)** | **1.309°** | **有效降低雜訊干擾**，成功消除雜訊跳變 |
-| **Roll (翻滾)** | **0.140°** | **誤差收斂於 0.15° 內**，受建築物垂直特徵保護 |
+| **Pitch (俯仰)** | **0.113°** | **誤差收斂於 0.15° 內**，捕捉坡度變化 |
+| **Yaw (偏航)** | **1.309°** | **降低雜訊干擾**，消除雜訊跳變 |
+| **Roll (翻滾)** | **0.140°** | **誤差收斂於 0.15° 內**，受建築物垂直特徵約束 |
 
-> **結論**：本系統在解耦演算法升級後，對於動態道路場景具備亞度級 (Sub-degree) 的姿態感知能力，MAE 均穩定控制在 **1.4° 以內**。
+
