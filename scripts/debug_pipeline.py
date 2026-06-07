@@ -3,7 +3,7 @@ import os
 import cv2
 import numpy as np
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 
 from vp_calib.engine import get_vp_inliers, draw_inliers
 

@@ -150,7 +150,7 @@ def draw_axes_on_image(image: np.ndarray, vps: List[np.ndarray], origin_px: Unio
         cv2.rectangle(overlay, (5, 5), (int(w*0.35), lh*3 + 30), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.4, output_img, 0.6, 0, output_img)
         for j, (name, val) in enumerate(zip(['Yaw', 'Pitch', 'Roll'], attitude)):
-            cv2.putText(output_img, f"{name}: {val:.1f} deg", (15, lh*(j+1)), cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 255, 255), 2)
+            cv2.putText(output_img, f"Est. {name}: {val:.1f} deg", (15, lh*(j+1)), cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 255, 255), 2)
     return output_img
 
 def estimate_origin_from_inliers(image_shape: Tuple[int, ...], inlier_masks: List[np.ndarray], lines: np.ndarray) -> List[int]:
