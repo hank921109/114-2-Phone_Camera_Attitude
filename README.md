@@ -127,14 +127,9 @@ graph TD
 ![Visual Odometry](docs/images/visual_odometry.gif)
 **註**：`Prediction` (紅線) 為推估軌跡，`Ground Truth` (藍線) 為真實軌跡；下方圖表同步顯示 Yaw、Pitch、Roll 變化以利 ATE (Absolute Trajectory Error) / RPE (Relative Pose Error) 誤差對比。
 
-**動態軌跡誤差數據 (KITTI Sequence 0001)**：
-| 指標名稱 | 誤差數值 |
-| :--- | :--- |
-| **ATE (Absolute Trajectory Error)** | 0.1266 m |
-| **RPE (Relative Pose Error)** | 0.0717 m/frame |
-| **Rotational RPE** | 0.0356 deg/frame |
-| **MAE (Mean Absolute Error)** | 0.1080 m |
-| **Rotational MAE** | 0.2746 deg |
-| **Average Pipeline FPS** | 16.16 FPS |
+**效能優化歷程**：
 
-      • 效能優化成果：將特徵擷取由 SIFT 替換為 ORB，使管線 FPS 由 ~3.1 提升至 ~13.xx；隨後將立體匹配核心從 SGBM 切換為 Block Matching (BM)，進一步將 FPS 提升至 16.16，絕對軌跡誤差 (ATE) 縮減至 0.1266 m。（註：精準度提升主要因為 Block Matching 在大場景的雜訊容忍度搭配特徵點追蹤，有效過濾了部分 SGBM 易產生的邊緣離群值。）
+| 優化項目 | 演算法變更 | FPS | 絕對軌跡誤差 (ATE) | 影響機制 |
+| :--- | :--- | :--- | :--- | :--- |
+| **特徵擷取** | SIFT -> ORB | ~3.1 -> ~13.0 | - | - |
+| **立體匹配** | SGBM -> Block Matching | ~13.0 -> 16.16 | 0.3133 m -> 0.1266 m | Block Matching 雜訊容忍度搭配特徵點追蹤，過濾 SGBM 產生之邊緣離群值 |
