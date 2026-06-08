@@ -6,7 +6,9 @@
 *   **功能**：偵測環境線段、計算 3D 姿態（Yaw, Pitch, Roll）、定位物理原點。
 *   **效能**：核心運算支援 **8.5+ FPS** 處理，單圖運算 < 0.15s。
 *   **限制**：需 Python 3.10+ 環境，依賴 OpenCV 與 NumPy。
-*   **界面**：輸入室內照片，輸出 y, r, p 數值ʼ劃上笛卡爾座標; 輸入雙鏡頭行車影像，經過 visual_odometry 處理，輸出 3D 軌跡圖與 KITTI 比較的 ATE (Absolute Trajectory Error)、RPE (Relative Pose Error) 計算誤差。
+*   **界面**：
+    1. 輸入室內相片，輸出 Yaw, Pitch, Roll 數值並標示笛卡爾座標。
+    2. 輸入雙鏡頭行車影像，輸出 3D 軌跡圖與 ATE、RPE 誤差。
 *   **驗收計畫 (Verification Plan)**：
     *   **測試資料**：`data/samples/rt0-7.jpg`（室內走廊）與 KITTI Odometry 序列。
     *   **預期輸出**：
@@ -96,27 +98,7 @@ graph TD
 ### 3. 系統設計 (System Design)
 
 #### 資料流圖 (DFD)
-```mermaid
-graph LR
-    Input{輸入格式}
-    Input -- "單鏡頭影像" --> Img[Image/Frame]
-    Img -- "Raw Image (Mat)" --> ML[Media Loader]
-    ML -- "Preprocessed Image (Mat)" --> ROI[Line Extractor: Semantic Filtering]
-    ROI -- "Filtered Edge Map (Mat)" --> Line[Line Extractor: Feature Extraction]
-    Line -- "Detected Lines (Array)" --> DS[VP Engine: Dual-Source Decoupling]
-    DS -- "Decoupled Line Pools (List)" --> RANSAC[VP Engine: RANSAC Solver]
-    RANSAC -- "Inlier Line Segments (Array)" --> SVD[VP Engine: SVD Refinement]
-    SVD -- "Vanishing Points (Array 3x3)" --> Ortho[Pose Solver: Double Orthogonalization]
-    Ortho -- "Rotation Matrix (Mat 3x3)" --> Pose[Pose Solver: Euler Angle Decomposer]
-    Pose -- "Euler Angles (Vector3)" --> Render[Visualizer: Adaptive Rendering]
-    Render -- "Annotated Image (Mat)" --> Out[Rendered Output]
-
-    Input -- "雙鏡頭影像" --> SGBM[Stereo Matching: SGBM]
-    SGBM -- "Disparity Map" --> SIFT[Feature Extraction: SIFT]
-    SIFT -- "Matched Keypoints" --> PnP[Motion Estimation: PnP RANSAC]
-    PnP -- "Relative Pose" --> Remap[Coordinate Remapping: Camera to Vehicle]
-    Remap -- "Vehicle Yaw, Pitch, Roll" --> VOut[3D 軌跡圖與 ATE / RPE 誤差]
-```
+![Data Flow Diagram](docs/dataflow.jpg)
 ![單鏡頭影像 Pipeline Inliers](docs/images/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
 
 #### 演算法優化紀錄 (5/29)
