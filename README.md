@@ -137,4 +137,4 @@ graph TD
 | **Rotational MAE** | 0.2746 deg |
 | **Average Pipeline FPS** | 16.16 FPS |
 
-      • 效能優化成果：將立體匹配核心從 SGBM 切換為 Block Matching (BM) 並精簡視差計算後，平均 FPS 大幅提升至 16.16 FPS，絕對軌跡誤差 (ATE) 亦進一步縮小至 0.1266 m。
+      • 效能優化成果：將立體匹配核心從 SGBM 切換為 Block Matching (BM) 並精簡視差計算後，平均 FPS 提升至 16.16，絕對軌跡誤差 (ATE) 縮減至 0.1266 m。（註：精準度提升主要因為 Block Matching 在大場景的雜訊容忍度搭配特徵點追蹤，有效過濾了部分 SGBM 易產生的邊緣離群值。）
