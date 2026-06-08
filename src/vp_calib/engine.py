@@ -58,6 +58,23 @@ def run_vectorized_ransac(lines: np.ndarray, iterations: int, threshold: float, 
 def get_vp_inliers(image_input: Any, contrast: float, sharpness: float, sigma: float, 
                    iterations: int, line_len: int, line_gap: int, threshold: float, 
                    processing_width: int = 960) -> Tuple[List, List, List]:
+    """
+    Detects vanishing points and their inlier lines using RANSAC.
+    
+    Args:
+        image_input: Path to the image or numpy array of the image.
+        contrast: Contrast enhancement factor.
+        sharpness: Sharpness enhancement factor.
+        sigma: Gaussian blur sigma.
+        iterations: Number of RANSAC iterations.
+        line_len: Minimum line length for Hough transform.
+        line_gap: Maximum line gap for Hough transform.
+        threshold: Inlier threshold angle in degrees.
+        processing_width: Width to resize image for processing.
+        
+    Returns:
+        Tuple containing inlier masks, vanishing points, and visualization data.
+    """
     full_image = read_image(image_input) if isinstance(image_input, str) else image_input
     if full_image is None: return [], [], [None, None, None, np.array([])]
     h, w = full_image.shape[:2]
@@ -82,12 +99,12 @@ def get_vp_inliers(image_input: Any, contrast: float, sharpness: float, sigma: f
     _, i_y = run_vectorized_ransac(lines_s, iterations, threshold, ignore_mask=~v_mask)
     _, i_z = run_vectorized_ransac(lines_s, iterations, threshold, ignore_mask=~road_mask)
     
-    def r_r(m):
+    def compute_vp_from_mask(m):
         if m is None or np.sum(m) < 2: return np.array([0, 0, 0.0])
         v = refine_vp_svd(lines_s[m])
         return np.array([v[0]/scale, v[1]/scale, v[2]])
 
-    vy, vz = r_r(i_y), r_r(i_z)
+    vy, vz = compute_vp_from_mask(i_y), compute_vp_from_mask(i_z)
     
     # [改良 2] Fallback 策略：若偵測不到 Vz，使用影像中心偏上點作為前進方向
     if np.linalg.norm(vz[:2]) < 1e-3 or vz[2] < 0.5:
@@ -157,7 +174,14 @@ def estimate_origin_from_inliers(image_shape: Tuple[int, ...], inlier_masks: Lis
     h, w = image_shape[:2]; return [w // 2, int(h * 0.85)]
 
 def determine_focal_length(vps: List[np.ndarray], image: np.ndarray) -> List[float]:
-    return [715.0]
+    default_focal = 715.0
+    if len(vps) >= 3 and vps[1] is not None and vps[2] is not None:
+        v1, v2 = vps[1][:2], vps[2][:2]
+        cx, cy = (image.shape[1] / 2, image.shape[0] / 2) if image is not None else (0, 0)
+        dot_prod = (v1[0] - cx) * (v2[0] - cx) + (v1[1] - cy) * (v2[1] - cy)
+        if dot_prod < -EPS:
+            return [math.sqrt(-dot_prod)]
+    return [default_focal]
 
 def draw_inliers(image: np.ndarray, masks: List[np.ndarray], lines: np.ndarray) -> np.ndarray:
     out = image.copy(); cv_colors = [(0, 0, 255), (255, 255, 0), (0, 255, 0)] 
@@ -167,12 +191,35 @@ def draw_inliers(image: np.ndarray, masks: List[np.ndarray], lines: np.ndarray) 
         for l in v_lines: cv2.line(out, tuple(l[0].astype(int)), tuple(l[1].astype(int)), cv_colors[i], 2)
     return out
 
-def main(image_path: str, **kwargs):
+def main(image_path: str, origin_x: float = 0, origin_y: float = 0, camera_h: float = 1.5, iterations: int = 1000):
     img_name = os.path.splitext(os.path.basename(image_path))[0]
-    inliers, vps, viz = get_vp_inliers(image_path, 1.2, 1.5, 2, 2000, 45, 10, 1.5, 1024)
-    full = viz[0]; pp = np.array([full.shape[1]/2, full.shape[0]/2])
+    
+    import json
+    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.json')
+    try:
+        with open(config_path, 'r') as f:
+            cfg = json.load(f)['calibration']
+    except Exception:
+        cfg = {"contrast": 1.2, "sharpness": 1.5, "sigma": 2.0, "iterations": iterations, "line_length": 45, "line_gap": 10, "threshold": 1.5, "processing_width": 1024}
+        
+    inliers, vps, viz = get_vp_inliers(
+        image_path, contrast=cfg.get("contrast", 1.2), sharpness=cfg.get("sharpness", 1.5), sigma=cfg.get("sigma", 2.0),
+        iterations=cfg.get("iterations", iterations), line_len=cfg.get("line_length", 45), line_gap=cfg.get("line_gap", 10), threshold=cfg.get("threshold", 1.5),
+        processing_width=cfg.get("processing_width", 1024)
+    )
+    full = viz[0]
+    if full is None:
+        raise ValueError(f"Could not read image: {image_path}")
+    pp = np.array([full.shape[1]/2, full.shape[0]/2])
     focal = determine_focal_length(vps, full)[0]
-    rm = calculate_rotation_matrix(vps, focal, pp); att = calculate_camera_attitude(rm)
-    origin = estimate_origin_from_inliers(full.shape, inliers, viz[3])
+    rm = calculate_rotation_matrix(vps, focal, pp)
+    att = calculate_camera_attitude(rm)
+    
+    pitch_rad = math.radians(att[1])
+    trans_vec = np.array([0, camera_h, camera_h * math.tan(pitch_rad)]) if abs(math.cos(pitch_rad)) > EPS else np.array([0, camera_h, 0])
+    
+    origin = [int(origin_x), int(origin_y)] if origin_x > 0 else estimate_origin_from_inliers(full.shape, inliers, viz[3])
     res = draw_axes_on_image(full, vps, origin, attitude=att)
+    os.makedirs("outputs", exist_ok=True)
     cv2.imwrite(os.path.join("outputs", f"result_{img_name}.png"), cv2.cvtColor(res, cv2.COLOR_RGB2BGR))
+    return focal, rm, trans_vec

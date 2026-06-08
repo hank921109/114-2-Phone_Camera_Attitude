@@ -3,6 +3,7 @@ import os
 import cv2
 import numpy as np
 import time
+import json
 from typing import Optional, List
 
 # 將 src 加入路徑
@@ -41,12 +42,20 @@ def process_single_image(img_path: str, output_path: Optional[str] = None):
         return
 
     height, width = frame.shape[:2]
+    # Load config
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
     try:
-        # 使用與準確版本一致的參數
+        with open(config_path, 'r') as f:
+            cfg = json.load(f)['calibration']
+    except Exception as e:
+        print(f"Warning: Could not load config.json, using defaults. {e}")
+        cfg = {"contrast": 1.5, "sharpness": 2.0, "sigma": 3, "iterations": 3000, "line_length": 60, "line_gap": 15, "threshold": 2.0, "processing_width": 960}
+
+    try:
         inliers, selected_vps, viz_stuff = get_vp_inliers(
-            frame, contrast=1.5, sharpness=2.0, sigma=3,
-            iterations=3000, line_len=60, line_gap=15, threshold=2.0,
-            processing_width=960
+            frame, contrast=cfg.get("contrast", 1.5), sharpness=cfg.get("sharpness", 2.0), sigma=cfg.get("sigma", 3.0),
+            iterations=cfg.get("iterations", 3000), line_len=cfg.get("line_length", 60), line_gap=cfg.get("line_gap", 15), threshold=cfg.get("threshold", 2.0),
+            processing_width=cfg.get("processing_width", 960)
         )        
         pp = np.array([width/2, height/2])
         
@@ -109,7 +118,9 @@ def process_video(video_path: str, output_path: str, stride: int = 2):
                 proc_fps = 1.0 / (time.time() - start_time) if (time.time() - start_time) > 0 else 0
                 cv2.putText(processed_frame, f"Proc FPS: {proc_fps:.1f}", (20, 360), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
                 out.write(processed_frame)
-            except: out.write(frame)
+            except Exception as e:
+                print(f"Error processing video frame: {e}")
+                out.write(frame)
         count += 1
         if count > 500: break
     cap.release(); out.release()

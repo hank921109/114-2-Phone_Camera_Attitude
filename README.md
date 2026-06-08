@@ -1,13 +1,12 @@
-<!-- 組長 F114112128 吳東穎, 組員 李秉穎 C111112160 -->
-# Vanishing Point Camera Calibration
-本專案利用環境中的幾何線條（如牆角、地磚、建築邊緣）所產生的「消失點（Vanishing Point）」推算相機的 3D 姿態與焦距標定。
+# 相機姿態估計：消失點與視覺里程計 (Camera Pose Estimation: Vanishing Point & Visual Odometry)
 
 ---
 
 ### 1. 需求與驗收計畫
-*   **功能**：偵測環境線段、計算 3D 姿態（Yaw, Pitch, Roll）、估算焦距（Focal）、定位物理原點。
+*   **功能**：偵測環境線段、計算 3D 姿態（Yaw, Pitch, Roll）、定位物理原點。
 *   **效能**：核心運算支援 **8.5+ FPS** 處理，單圖運算 < 0.15s。
 *   **限制**：需 Python 3.10+ 環境，依賴 OpenCV 與 NumPy。
+*   **處理流程與產出**：輸入室內照片，輸出 y, r, p 數值ʼ劃上笛卡爾座標; 輸入雙鏡頭行車影像，經過 visual_odometry 處理，輸出 3D 軌跡圖與 KITTI 比較的 ATE (Absolute Trajectory Error)、RPE (Relative Pose Error) 計算誤差。
 *   **驗收計畫 (Verification Plan)**：
     *   **測試資料**：`data/samples/rt0-7.jpg`（室內走廊）與 KITTI Odometry 序列。
     *   **預期輸出**：
@@ -43,6 +42,9 @@ graph TD
     DET --- DET_Desc["Otsu Binarization<br/>Canny & Hough"]
     RAN --- RAN_Desc["Vectorized RANSAC<br/>SVD Refinement"]
     POS --- POS_Desc["Manhattan Ortho<br/>Euler Decomposition"]
+
+    System --> VO[Visual Odometry]
+    VO --- VO_Desc["SGBM Stereo Matching<br/>SIFT Feature<br/>PnP RANSAC"]
 ```
 
 | 演算法 (Algorithm) | What (演算法內容) | Why (設計目的) | How (實作方式) |
@@ -56,6 +58,9 @@ graph TD
 | **Singular Value SVD** | 奇異值分解矩陣運算 | 從投票後的 Inlier 線段集中解出亞像素交點 | 建立超定齊次方程組，提取最小奇異值對應之特徵向量作為消失點座標 |
 | **Manhattan World Ortho** | 曼哈頓世界正交化約束 | 確保三軸消失點在物理空間中互相垂直 | 透過 Cross Product 執行二次正交校準，確保旋轉矩陣之正規性 |
 | **Euler Decomposition** | 歐拉角分解演算法 | 從旋轉矩陣中提取 Yaw, Pitch, Roll 指標 | 基於相機座標系 (Z-Forward)，利用 atan2 函數處理矩陣項之比例關係 |
+| **SGBM** | 立體匹配與視差計算 | 從雙鏡頭影像獲取 3D 深度資訊 | 使用 Semi-Global Block Matching 建立視差圖 |
+| **SIFT** | 特徵點檢測與描述 | 建立連續影像間的特徵對應基準 | 在尺度空間中尋找極值點並計算局部梯度方向直方圖 |
+| **PnP RANSAC** | 相機姿態估計 | 排除誤匹配並計算相對運動 | 利用 2D-3D 特徵點對應，以 RANSAC 篩選 Inliers 並求解旋轉與平移矩陣 |
 
 ---
 
@@ -64,7 +69,9 @@ graph TD
 #### 資料流圖 (DFD)
 ```mermaid
 graph LR
-    Img[Image/Frame] -- "Raw Image (Mat)" --> ML[Media Loader]
+    Input{輸入格式}
+    Input -- "單鏡頭影像" --> Img[Image/Frame]
+    Img -- "Raw Image (Mat)" --> ML[Media Loader]
     ML -- "Preprocessed Image (Mat)" --> ROI[Line Extractor: Semantic Filtering]
     ROI -- "Filtered Edge Map (Mat)" --> Line[Line Extractor: Feature Extraction]
     Line -- "Detected Lines (Array)" --> DS[VP Engine: Dual-Source Decoupling]
@@ -74,8 +81,14 @@ graph LR
     Ortho -- "Rotation Matrix (Mat 3x3)" --> Pose[Pose Solver: Euler Angle Decomposer]
     Pose -- "Euler Angles (Vector3)" --> Render[Visualizer: Adaptive Rendering]
     Render -- "Annotated Image (Mat)" --> Out[Rendered Output]
+
+    Input -- "雙鏡頭影像" --> SGBM[Stereo Matching: SGBM]
+    SGBM -- "Disparity Map" --> SIFT[Feature Extraction: SIFT]
+    SIFT -- "Matched Keypoints" --> PnP[Motion Estimation: PnP RANSAC]
+    PnP -- "Relative Pose" --> Remap[Coordinate Remapping: Camera to Vehicle]
+    Remap -- "Vehicle Yaw, Pitch, Roll" --> VOut[3D 軌跡圖與 ATE / RPE 誤差]
 ```
-![Pipeline Inliers](docs/images/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
+![單鏡頭影像 Pipeline Inliers](docs/images/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
 
 #### 演算法優化紀錄 (5/29)
 針對 KITTI 道路場景中「樹葉雜訊干擾 RANSAC」與「座標軸漂移」問題，進行了以下演算法優化：
@@ -94,6 +107,7 @@ graph LR
 | **VP Engine** | `get_vp_inliers()` | **Semantic Split** | 分離地平面與垂直結構特徵，實作 Dual-Source 偵測 |
 | **Pose Solver** | `calculate_rotation_matrix()`| **Strict Orthogonality**| 基於 Z-Forward 標準實作二次正交校準 |
 | **Visualizer** | `draw_axes_on_image()` | **Infinity Handling** | 支援無窮遠消失點渲染，自動調整 Y 軸方向 |
+| **Visual Odometry**| `VisualOdometryEstimator.run()`| **Motion Estimation** | 結合立體視差與特徵追蹤，透過 PnP RANSAC 求解連續影像之相對姿態 |
 
 ---
 
@@ -111,16 +125,13 @@ graph LR
 
 #### 4.2 KITTI 道路實測成果 (Dynamic Sequences)
 
+**單鏡頭輸入 (Vanishing Point 標定)**：
 | ![result_000000](docs/images/result_000000.png) | ![result_000001](docs/images/result_000001.png) | ![result_000008](docs/images/result_000008.png) |
 | :---: | :---: | :---: |
 | **00: 初始偏差校正** | **01: 結構轉角定位** | **08: 長直線深度追蹤** |
 
-#### 4.3 統計報表
+**雙鏡頭輸入 (Stereo Visual Odometry 軌跡與誤差驗證)**：
+![Visual Odometry](docs/images/visual_odometry.gif)
+**註**：`Prediction` (紅線) 為推估軌跡，`Ground Truth` (藍線) 為真實軌跡；下方圖表同步顯示 Yaw、Pitch、Roll 變化以利 ATE (Absolute Trajectory Error) / RPE (Relative Pose Error) 誤差對比。
 
-![KITTI Accuracy Report](docs/images/kitti_accuracy_report_v2.png)
-
-| 測試維度 | 相對絕對誤差 (Relative MAE) | 穩定度評估 |
-| :--- | :--- | :--- |
-| **Pitch (俯仰)** | **0.113°** | **誤差收斂於 0.15° 內**，捕捉坡度變化 |
-| **Yaw (偏航)** | **1.309°** | **降低雜訊干擾**，消除雜訊跳變 |
-| **Roll (翻滾)** | **0.140°** | **誤差收斂於 0.15° 內**，受建築物垂直特徵約束 |
+      • 優化成果：在 SIFT 切換為 ORB 後，平均 FPS 從原本的 ~3.1 FPS 提升至 10.51 FPS

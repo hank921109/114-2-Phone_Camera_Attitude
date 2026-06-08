@@ -1,0 +1,12 @@
+{
+    "calibration": {
+        "contrast": 1.2,
+        "sharpness": 1.5,
+        "sigma": 3.0,
+        "iterations": 2000,
+        "line_length": 45,
+        "line_gap": 10,
+        "threshold": 1.5,
+        "processing_width": 1024
+    }
+}
