@@ -143,11 +143,4 @@ graph LR
 ![Visual Odometry](docs/images/visual_odometry.gif)
 **註**：`Prediction` (紅線) 為推估軌跡，`Ground Truth` (藍線) 為真實軌跡；下方圖表同步顯示 Yaw、Pitch、Roll 變化以利 ATE (Absolute Trajectory Error) / RPE (Relative Pose Error) 誤差對比。
 
-**動態軌跡誤差數據 (KITTI Sequence 0001)**：
-| 指標名稱 | 誤差數值 | 說明 |
-| :--- | :--- | :--- |
-| **ATE (Absolute Trajectory Error)** | 0.2296 m | 全局軌跡絕對 RMSE 誤差 |
-| **RPE (Relative Pose Error)** | 0.0782 m/frame | 相鄰幀相對平移漂移 |
-| **MAE (Mean Absolute Error)** | 0.1576 m | 全局平均絕對距離誤差 |
-
       • 優化成果：在 SIFT 切換為 ORB 後，平均 FPS 從原本的 ~3.1 FPS 提升至 10.51 FPS

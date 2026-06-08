@@ -108,7 +108,7 @@ def main():
     processed_frames = 0
 
     # Run the pipeline
-    for i in tqdm(range(1, min(26, len(dataset))), desc="Running the pipeline"):
+    for i in tqdm(range(1, min(36, len(dataset))), desc="Running the pipeline"):
         item = dataset[i]
         left_image = cv2.imread(str(item.left_image), cv2.IMREAD_GRAYSCALE)
         right_image = cv2.imread(str(item.right_image), cv2.IMREAD_GRAYSCALE)
@@ -134,8 +134,8 @@ def main():
         print(f"Frame {i}: Yaw={ypr[0]:.2f}, Pitch={ypr[1]:.2f}, Roll={ypr[2]:.2f}, FPS={frame_fps:.2f}")
 
         evaluator.update(
-            item.gt_pose[:3, 3],
-            pipeline.current_translation,
+            item.gt_pose[:3, :],
+            pipeline.current_pose[:3, :],
         )
         metrics = evaluator.compute()
 
@@ -158,7 +158,9 @@ def main():
 
     print(f"Absolute Trajectory Error (ATE / RMSE): {metrics.rmse:.4f} m")
     print(f"Relative Pose Error (RPE): {metrics.rpe:.4f} m/frame")
+    print(f"Rotational RPE: {metrics.rpe_rot:.4f} deg/frame")
     print(f"Mean Absolute Error (MAE): {metrics.mae:.4f} m")
+    print(f"Rotational MAE: {metrics.mae_rot:.4f} deg")
     
     avg_fps = processed_frames / total_time if total_time > 0 else 0.0
     print(f"Average Pipeline FPS: {avg_fps:.2f}")
