@@ -26,7 +26,7 @@ class Plotter:
 
     def __init__(self, min_pose: np.ndarray, max_pose: np.ndarray) -> None:
         self.fig = plt.figure(figsize=(16, 9))
-        gs = gridspec.GridSpec(4, 3, height_ratios=[1.5, 1, 1, 1])
+        gs = gridspec.GridSpec(5, 3, height_ratios=[1.5, 1, 1, 1, 1])
 
         self.ax1 = self.fig.add_subplot(gs[0, 0])
         self.ax2 = self.fig.add_subplot(gs[0, 1])
@@ -34,13 +34,19 @@ class Plotter:
         
         self.ax4 = self.fig.add_subplot(gs[1:, 0:2], projection="3d")
         self.ax5 = self.fig.add_subplot(gs[1, 2])
-        self.ax6 = self.fig.add_subplot(gs[2, 2])
-        self.ax7 = self.fig.add_subplot(gs[3, 2])
+        self.ax_rot = self.fig.add_subplot(gs[2, 2])
+        self.ax6 = self.fig.add_subplot(gs[3, 2])
+        self.ax7 = self.fig.add_subplot(gs[4, 2])
 
         self.ax5.set_xlabel("Frame")
         self.ax5.set_ylabel("Error (m)")
-        self.ax5.set_title("Visual Odometry Metrics")
+        self.ax5.set_title("Translational Metrics")
         self.ax5.grid(True)
+
+        self.ax_rot.set_xlabel("Frame")
+        self.ax_rot.set_ylabel("Error (deg)")
+        self.ax_rot.set_title("Rotational Metrics")
+        self.ax_rot.grid(True)
 
         self.ax6.set_xlabel("Frame")
         self.ax6.set_ylabel("Degrees")
@@ -119,6 +125,11 @@ class Plotter:
         self.ax5.scatter(self.idx, metrics.rpe, color="purple", label="RPE" if self.idx == 1 else "")
         if self.idx == 1:
             self.ax5.legend(loc="upper left")
+
+        self.ax_rot.scatter(self.idx, metrics.rpe_rot, color="purple", label="Rotational RPE" if self.idx == 1 else "")
+        self.ax_rot.scatter(self.idx, metrics.mae_rot, color="orange", label="Rotational MAE" if self.idx == 1 else "")
+        if self.idx == 1:
+            self.ax_rot.legend(loc="upper left")
 
         if ypr is not None:
             self.ax6.scatter(self.idx, ypr[0], color="red", label="Yaw" if self.idx == 1 else "")
