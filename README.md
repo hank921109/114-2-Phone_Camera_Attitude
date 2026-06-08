@@ -6,7 +6,7 @@
 *   **功能**：偵測環境線段、計算 3D 姿態（Yaw, Pitch, Roll）、定位物理原點。
 *   **效能**：核心運算支援 **8.5+ FPS** 處理，單圖運算 < 0.15s。
 *   **限制**：需 Python 3.10+ 環境，依賴 OpenCV 與 NumPy。
-*   **處理流程與產出**：輸入室內照片，輸出 y, r, p 數值ʼ劃上笛卡爾座標; 輸入雙鏡頭行車影像，經過 visual_odometry 處理，輸出 3D 軌跡圖與 KITTI 比較的 ATE (Absolute Trajectory Error)、RPE (Relative Pose Error) 計算誤差。
+*   **界面**：輸入室內照片，輸出 y, r, p 數值ʼ劃上笛卡爾座標; 輸入雙鏡頭行車影像，經過 visual_odometry 處理，輸出 3D 軌跡圖與 KITTI 比較的 ATE (Absolute Trajectory Error)、RPE (Relative Pose Error) 計算誤差。
 *   **驗收計畫 (Verification Plan)**：
     *   **測試資料**：`data/samples/rt0-7.jpg`（室內走廊）與 KITTI Odometry 序列。
     *   **預期輸出**：
@@ -19,6 +19,18 @@
 ---
 
 ### 2. 系統分析 (Analysis)
+
+#### OpenCV 工具箱 (OpenCV Toolbox)
+| 類別 | OpenCV 函式 (Function) | 應用於本專案之用途 |
+| :--- | :--- | :--- |
+| **系統最佳化** | `cv2.setUseOptimized`, `cv2.ocl.setUseOpenCL` | 啟用底層硬體最佳化與 OpenCL 加速 |
+| **影像與影片 I/O** | `cv2.imread`, `cv2.imwrite`, `cv2.VideoCapture`, `cv2.VideoWriter` | 讀寫單張相片、連續影格序列處理與成果影片編碼輸出 |
+| **色彩與預處理** | `cv2.cvtColor`, `cv2.resize`, `cv2.convertScaleAbs` | 灰階與 RGB 空間轉換、影像縮小以提升運算速度、對比度線性強化 |
+| **進階影像濾波** | `cv2.createCLAHE`, `cv2.GaussianBlur` | 解決逆光與陰影問題的自適應直方圖均衡化、高斯平滑降噪 |
+| **邊緣與線段檢測** | `cv2.threshold` (Otsu), `cv2.Canny`, `cv2.HoughLinesP` | 最佳化二值化門檻、提取結構輪廓邊緣、利用機率霍夫變換找出建築與車道線段 |
+| **特徵追蹤與匹配** | `cv2.ORB_create`, `cv2.BFMatcher` | ORB 特徵點萃取與二進制描述子計算、暴力特徵點追蹤與配對 |
+| **立體視覺與姿態估計**| `cv2.StereoSGBM_create`, `cv2.solvePnPRansac`, `cv2.Rodrigues` | SGBM 雙目視差圖計算、利用 3D-2D 特徵對推算相機相對運動、旋轉矩陣與旋轉向量互相轉換 |
+| **幾何繪圖與 GUI** | `cv2.line`, `cv2.arrowedLine`, `cv2.putText`, `cv2.addWeighted` | 標記消失點連線、繪製即時 3D 姿態軸 (XYZ)、渲染半透明文字 HUD 與動態資訊面板 |
 
 #### RANSAC 消失點檢測原理
 | 步驟 | 動作 | 實作技術 |
@@ -55,6 +67,14 @@ graph TD
         VO_MOT --- VO_MOT_Desc["1. 3D-2D Projection<br/>2. Perspective-n-Point RANSAC<br/>3. Trajectory Concatenation"]
     end
 ```
+
+#### RANSAC 消失點檢測原理
+| 步驟 | 動作 | 實作技術 |
+| :--- | :--- | :--- |
+| **1. 採樣 (Sampling)** | 隨機選取兩條線段作為模型假設 | **Vectorized Batch Sampling** (生成 2000 組) |
+| **2. 假設 (Hypothesis)** | 計算兩條線的交點作為潛在消失點 | **Homogeneous Cross Product** (齊次座標外積) |
+| **3. 驗證 (Verification)** | 統計 Inliers 並計算角度殘差 | **NumPy Matrix Multiply** (矩陣化運算) |
+| **4. 精煉 (Refinement)** | 使用投票線段重新求解交點 | **SVD (Singular Value Decomposition)** 奇異值分解 |
 
 | 演算法 (Algorithm) | What (演算法內容) | Why (設計目的) | How (實作方式) |
 | :--- | :--- | :--- | :--- |
