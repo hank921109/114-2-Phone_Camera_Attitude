@@ -33,18 +33,27 @@
 graph TD
     System[Vanishing Point Calibration System]
     
-    System --> PRE[Image Preprocessing]
-    System --> DET[Feature Detection]
-    System --> RAN[Model Estimation]
-    System --> POS[Orientation Solving]
+    subgraph Single Camera Calibration
+        System --> PRE[Image Preprocessing]
+        PRE --> DET[Feature Detection]
+        DET --> RAN[Model Estimation]
+        RAN --> POS[Orientation Solving]
 
-    PRE --- PRE_Desc["CLAHE<br/>Gaussian Blur"]
-    DET --- DET_Desc["Otsu Binarization<br/>Canny & Hough"]
-    RAN --- RAN_Desc["Vectorized RANSAC<br/>SVD Refinement"]
-    POS --- POS_Desc["Manhattan Ortho<br/>Euler Decomposition"]
+        PRE --- PRE_Desc["1. CLAHE Contrast<br/>2. Gaussian Blur"]
+        DET --- DET_Desc["1. Otsu Binarization<br/>2. Adaptive Canny<br/>3. Probabilistic Hough"]
+        RAN --- RAN_Desc["1. Semantic Decoupling<br/>2. Vectorized RANSAC<br/>3. SVD Refinement"]
+        POS --- POS_Desc["1. Double Orthogonalization<br/>2. Euler Decomposition"]
+    end
 
-    System --> VO[Visual Odometry]
-    VO --- VO_Desc["SGBM Stereo Matching<br/>SIFT Feature<br/>PnP RANSAC"]
+    subgraph Stereo Visual Odometry
+        System --> VO_PRE[Stereo Processing]
+        VO_PRE --> VO_FEAT[Feature Tracking]
+        VO_FEAT --> VO_MOT[Motion Estimation]
+        
+        VO_PRE --- VO_PRE_Desc["1. Undistortion & Rectification<br/>2. SGBM Disparity Map"]
+        VO_FEAT --- VO_FEAT_Desc["1. ORB Keypoints<br/>2. FLANN/Brute-Force Matching"]
+        VO_MOT --- VO_MOT_Desc["1. 3D-2D Projection<br/>2. Perspective-n-Point RANSAC<br/>3. Trajectory Concatenation"]
+    end
 ```
 
 | 演算法 (Algorithm) | What (演算法內容) | Why (設計目的) | How (實作方式) |
@@ -133,5 +142,12 @@ graph LR
 **雙鏡頭輸入 (Stereo Visual Odometry 軌跡與誤差驗證)**：
 ![Visual Odometry](docs/images/visual_odometry.gif)
 **註**：`Prediction` (紅線) 為推估軌跡，`Ground Truth` (藍線) 為真實軌跡；下方圖表同步顯示 Yaw、Pitch、Roll 變化以利 ATE (Absolute Trajectory Error) / RPE (Relative Pose Error) 誤差對比。
+
+**動態軌跡誤差數據 (KITTI Sequence 0001)**：
+| 指標名稱 | 誤差數值 | 說明 |
+| :--- | :--- | :--- |
+| **ATE (Absolute Trajectory Error)** | 0.2296 m | 全局軌跡絕對 RMSE 誤差 |
+| **RPE (Relative Pose Error)** | 0.0782 m/frame | 相鄰幀相對平移漂移 |
+| **MAE (Mean Absolute Error)** | 0.1576 m | 全局平均絕對距離誤差 |
 
       • 優化成果：在 SIFT 切換為 ORB 後，平均 FPS 從原本的 ~3.1 FPS 提升至 10.51 FPS
