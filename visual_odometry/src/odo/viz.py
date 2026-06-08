@@ -116,6 +116,7 @@ class Plotter:
         self.ax5.scatter(self.idx, metrics.mse, color="red", label="MSE" if self.idx == 1 else "")
         self.ax5.scatter(self.idx, metrics.rmse, color="blue", label="RMSE" if self.idx == 1 else "")
         self.ax5.scatter(self.idx, metrics.mae, color="green", label="MAE" if self.idx == 1 else "")
+        self.ax5.scatter(self.idx, metrics.rpe, color="purple", label="RPE" if self.idx == 1 else "")
         if self.idx == 1:
             self.ax5.legend(loc="upper left")
 

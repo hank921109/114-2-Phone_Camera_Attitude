@@ -4,7 +4,7 @@
 
 ### 1. 需求
 *   **功能**：偵測環境線段、計算 3D 姿態（Yaw, Pitch, Roll）、定位物理原點。
-*   **效能**：核心運算支援 **8.5+ FPS** 處理，單圖運算 < 0.15s。
+*   **效能**：運算支援 **8.5+ FPS** 處理，單圖運算 < 0.15s。
 *   **限制**：需 Python 3.10+ 環境，依賴 OpenCV 與 NumPy。
 *   **界面**：
     1. 輸入室內相片，輸出 Yaw, Pitch, Roll 數值並標示笛卡爾座標。
@@ -23,7 +23,7 @@
 ### 2. 系統分析 (Analysis)
 
 #### OpenCV 工具箱 (OpenCV Toolbox)
-| 類別 | OpenCV 函式 (Function) | 應用於本專案之用途 |
+| 類別 | OpenCV 函式 (Function) | 本專案之用途 |
 | :--- | :--- | :--- |
 | **系統最佳化** | `cv2.setUseOptimized`, `cv2.ocl.setUseOpenCL` | 啟用底層硬體最佳化與 OpenCL 加速 |
 | **影像與影片 I/O** | `cv2.imread`, `cv2.imwrite`, `cv2.VideoCapture`, `cv2.VideoWriter` | 讀寫單張相片、連續影格序列處理與成果影片編碼輸出 |
@@ -94,7 +94,7 @@ graph TD
 ![單鏡頭影像 Pipeline Inliers](docs/images/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
 
 #### API Table
-| 模組 | 函數名稱 | 改進重點 | 描述 |
+| 模組 | 函數名稱 | 參數簡列 | 描述 |
 | :--- | :--- | :--- | :--- |
 | **Line Extractor** | `get_hough_lines_cv()` | **Texture Filtering** | 提高邊緣閾值，過濾樹木紋理 |
 | **VP Engine** | `get_vp_inliers()` | **Semantic Split** | 分離地平面與垂直結構特徵，實作 Dual-Source 偵測 |
@@ -137,4 +137,4 @@ graph TD
 | **Rotational MAE** | 0.2746 deg |
 | **Average Pipeline FPS** | 16.16 FPS |
 
-      • 效能優化成果：將立體匹配核心從 SGBM 切換為 Block Matching (BM) 並精簡視差計算後，平均 FPS 提升至 16.16，絕對軌跡誤差 (ATE) 縮減至 0.1266 m。（註：精準度提升主要因為 Block Matching 在大場景的雜訊容忍度搭配特徵點追蹤，有效過濾了部分 SGBM 易產生的邊緣離群值。）
+      • 效能優化成果：將特徵擷取由 SIFT 替換為 ORB，使管線 FPS 由 ~3.1 提升至 ~13.xx；隨後將立體匹配核心從 SGBM 切換為 Block Matching (BM)，進一步將 FPS 提升至 16.16，絕對軌跡誤差 (ATE) 縮減至 0.1266 m。（註：精準度提升主要因為 Block Matching 在大場景的雜訊容忍度搭配特徵點追蹤，有效過濾了部分 SGBM 易產生的邊緣離群值。）
