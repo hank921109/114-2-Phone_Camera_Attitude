@@ -31,7 +31,7 @@ def main():
 
     # Initialize the StereoMatcher
     stereo_matching_config = StereoMatchingConfig(
-        method="sgbm", num_disparities=96, block_size=11
+        method="bm", num_disparities=64, block_size=15
     )
     stereo_matcher = StereoMatcher(stereo_matching_config)
 

@@ -70,14 +70,6 @@ graph TD
     end
 ```
 
-#### RANSAC 消失點檢測原理
-| 步驟 | 動作 | 實作技術 |
-| :--- | :--- | :--- |
-| **1. 採樣 (Sampling)** | 隨機選取兩條線段作為模型假設 | **Vectorized Batch Sampling** (生成 2000 組) |
-| **2. 假設 (Hypothesis)** | 計算兩條線的交點作為潛在消失點 | **Homogeneous Cross Product** (齊次座標外積) |
-| **3. 驗證 (Verification)** | 統計 Inliers 並計算角度殘差 | **NumPy Matrix Multiply** (矩陣化運算) |
-| **4. 精煉 (Refinement)** | 使用投票線段重新求解交點 | **SVD (Singular Value Decomposition)** 奇異值分解 |
-
 | 演算法 (Algorithm) | What (演算法內容) | Why (設計目的) | How (實作方式) |
 | :--- | :--- | :--- | :--- |
 | **CLAHE** | 限制對比度自適應直方圖均衡化 | 增強影像局部對比度，提取陰影或過曝區域的邊緣 | 將影像分割為 8x8 局部區塊進行直方圖均衡，並限制對比度增益 |
@@ -100,16 +92,6 @@ graph TD
 #### 資料流圖 (DFD)
 ![Data Flow Diagram](docs/dataflow.jpg)
 ![單鏡頭影像 Pipeline Inliers](docs/images/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
-
-#### 演算法優化紀錄 (5/29)
-針對 KITTI 道路場景中「樹葉雜訊干擾 RANSAC」與「座標軸漂移」問題，進行了以下演算法優化：
-*   **語意解耦標定 (Decoupled Dual-Source)**：
-    *   **What**: 將線段池拆分為「建築池（垂直線）」與「路面池（車道線）」。
-    *   **Why**: 避免道路兩側的樹木產生邊緣干擾 Yaw 估計。
-    *   **How**: 利用建築垂直線鎖定重力基準，利用車道線校準前進方向。
-*   **二次正交修正 (Double Orthogonalization)**：
-    *   **What**: 在 Pose Solver 階段執行兩次交叉乘積校正。
-    *   **Why**: 確保 $X \perp Y \perp Z$ 成立，消除單幀標定導致的座標軸歪斜。
 
 #### API Table
 | 模組 | 函數名稱 | 改進重點 | 描述 |
@@ -148,11 +130,11 @@ graph TD
 **動態軌跡誤差數據 (KITTI Sequence 0001)**：
 | 指標名稱 | 誤差數值 |
 | :--- | :--- |
-| **ATE (Absolute Trajectory Error)** | 0.3133 m |
+| **ATE (Absolute Trajectory Error)** | 0.1266 m |
 | **RPE (Relative Pose Error)** | 0.0717 m/frame |
-| **Rotational RPE** | 0.0339 deg/frame |
-| **MAE (Mean Absolute Error)** | 0.2110 m |
-| **Rotational MAE** | 0.3003 deg |
-| **Average Pipeline FPS** | 10.33 FPS |
+| **Rotational RPE** | 0.0356 deg/frame |
+| **MAE (Mean Absolute Error)** | 0.1080 m |
+| **Rotational MAE** | 0.2746 deg |
+| **Average Pipeline FPS** | 16.16 FPS |
 
-      • 優化成果：在 SIFT 切換為 ORB 後，平均 FPS 從原本的 ~3.1 FPS 提升至 10.31 FPS
+      • 效能優化成果：將立體匹配核心從 SGBM 切換為 Block Matching (BM) 並精簡視差計算後，平均 FPS 大幅提升至 16.16 FPS，絕對軌跡誤差 (ATE) 亦進一步縮小至 0.1266 m。
