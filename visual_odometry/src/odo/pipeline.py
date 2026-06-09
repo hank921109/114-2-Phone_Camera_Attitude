@@ -3,11 +3,28 @@ from typing import List
 
 import cv2
 import numpy as np
+from numba import jit
 
 from odo.features import FeatureDetectorAndDescriptor, FeatureMatcher
 from odo.motion import estimate_stereo_motion
 from odo.stereo_matching import StereoMatcher, disp_to_depth
 
+
+import math
+
+@jit(nopython=True)
+def rotation_to_euler(R: np.ndarray) -> np.ndarray:
+    sy = math.sqrt(R[0,0] * R[0,0] + R[1,0] * R[1,0])
+    singular = sy < 1e-6
+    if not singular:
+        x = math.atan2(R[2,1] , R[2,2])
+        y = math.atan2(-R[2,0], sy)
+        z = math.atan2(R[1,0], R[0,0])
+    else:
+        x = math.atan2(-R[1,2], R[1,1])
+        y = math.atan2(-R[2,0], sy)
+        z = 0
+    return np.array([y, x, z]) * 180.0 / math.pi
 
 @dataclass
 class Frame:
@@ -133,13 +150,37 @@ class VisualOdometryEstimator:
         if not self._is_initialized:
             raise ValueError("Pipeline must be initialized first")
 
-        self._current_frame.detect_and_compute_features(self.feature_detector)
-        self._current_frame.compute_disparity_map(self.stereo_matcher)
-        self._current_frame.compute_depth_map(self.bf)
+        from concurrent.futures import ThreadPoolExecutor
+        
+        def track_features():
+            if not self._prev_frame.kp1:
+                return [], [], []
+            p0 = np.array([kp.pt for kp in self._prev_frame.kp1], dtype=np.float32).reshape(-1, 1, 2)
+            p1, st, err = cv2.calcOpticalFlowPyrLK(
+                self._prev_frame.image_left, 
+                self._current_frame.image_left, 
+                p0, None, 
+                winSize=(21, 21), maxLevel=3, 
+                criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01)
+            )
+            good_new = p1[st == 1]
+            old_indices = np.where(st == 1)[0]
+            
+            tracked_kp = []
+            matches = []
+            for idx2, (idx1, pt) in enumerate(zip(old_indices, good_new)):
+                tracked_kp.append(cv2.KeyPoint(x=float(pt[0]), y=float(pt[1]), size=1))
+                matches.append(cv2.DMatch(int(idx1), idx2, 0.0))
+            return tracked_kp, matches, good_new
 
-        matches = self.feature_matcher.match_and_filter(
-            self._prev_frame.dp1, self._current_frame.dp1
-        )
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_disp = executor.submit(self._current_frame.compute_disparity_map, self.stereo_matcher)
+            future_track = executor.submit(track_features)
+            
+            future_disp.result()
+            tracked_kp, matches, good_new = future_track.result()
+
+        self._current_frame.compute_depth_map(self.bf)
         self._current_frame.matches = matches
 
         if len(matches) < 10:
@@ -149,10 +190,17 @@ class VisualOdometryEstimator:
         rmat, tvec = estimate_stereo_motion(
             matches=matches,
             kp1=self._prev_frame.kp1,
-            kp2=self._current_frame.kp1,
+            kp2=tracked_kp,
             k_left=self.camera_matrix,
             depth_map=self._prev_frame.depth_map,
         )
+
+        if len(good_new) < 300:
+            self._current_frame.kp1 = None
+            self._current_frame.dp1 = None
+            self._current_frame.detect_and_compute_features(self.feature_detector)
+        else:
+            self._current_frame.kp1 = tracked_kp
 
         self._current_frame.rmat = rmat
         self._current_frame.tvec = tvec
@@ -197,21 +245,5 @@ class VisualOdometryEstimator:
     @property
     def current_euler_angles(self):
         """Return the current euler angles (yaw, pitch, roll) in degrees."""
-        import math
         R = self._current_pose[:3, :3]
-        sy = math.sqrt(R[0,0] * R[0,0] + R[1,0] * R[1,0])
-        singular = sy < 1e-6
-        if not singular:
-            x = math.atan2(R[2,1] , R[2,2]) # Camera Pitch -> Vehicle Roll (Wait, Rotation around X is Pitch)
-            y = math.atan2(-R[2,0], sy)    # Camera Yaw -> Vehicle Yaw
-            z = math.atan2(R[1,0], R[0,0]) # Camera Roll -> Vehicle Pitch
-        else:
-            x = math.atan2(-R[1,2], R[1,1])
-            y = math.atan2(-R[2,0], sy)
-            z = 0
-            
-        # Vehicle Dynamics Mapping:
-        # Yaw: Rotation around Camera Y-axis (y)
-        # Pitch: Rotation around Camera X-axis (x)
-        # Roll: Rotation around Camera Z-axis (z)
-        return np.array([y, x, z]) * 180 / np.pi
+        return rotation_to_euler(R)

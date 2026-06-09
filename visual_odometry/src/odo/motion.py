@@ -52,7 +52,12 @@ def estimate_stereo_motion(
         idx2 = match.trainIdx
         p1 = kp1[idx1].pt
         p2 = kp2[idx2].pt
-        depth = depth_map[int(p1[1]), int(p1[0])]
+        
+        u, v = int(p1[0]), int(p1[1])
+        if v < 0 or v >= depth_map.shape[0] or u < 0 or u >= depth_map.shape[1]:
+            continue
+            
+        depth = depth_map[v, u]
         if math.isnan(depth) or math.isinf(depth):
             continue
         points_3d.append(
