@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import cv2
@@ -20,7 +21,9 @@ from odo.utils import compute_bf, decompose_projection_matrix
 from odo.viz import Plotter, VideoSaver
 
 
-def main(db_path_str: str = "/home/nvidia/Documents/VanishingPointCameraCalibration/visual_odometry/KITTI/dataset"):
+DEFAULT_DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "KITTI", "dataset"))
+
+def main(db_path_str: str = DEFAULT_DB_PATH):
     cv2.setUseOptimized(True)
     cv2.ocl.setUseOpenCL(True)
 
@@ -95,8 +98,10 @@ def main(db_path_str: str = "/home/nvidia/Documents/VanishingPointCameraCalibrat
                 int(plotter.fig.get_size_inches()[0] * plotter.fig.dpi),
                 int(plotter.fig.get_size_inches()[1] * plotter.fig.dpi),
             )
+            assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets"))
+            os.makedirs(assets_dir, exist_ok=True)
             video_saver = VideoSaver(
-                "assets/visual_odometry.gif", fps=10, frame_size=frame_size
+                os.path.join(assets_dir, "visual_odometry.gif"), fps=10, frame_size=frame_size
             )
 
     # Initialize the pose lists
@@ -167,7 +172,8 @@ def main(db_path_str: str = "/home/nvidia/Documents/VanishingPointCameraCalibrat
 
     if save_video:
         video_saver.release()
-        cv2.imwrite("assets/pipeline_output.png", video_saver.current_frame)
+        assets_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "assets"))
+        cv2.imwrite(os.path.join(assets_dir, "pipeline_output.png"), video_saver.current_frame)
 
     plt.close()
 
