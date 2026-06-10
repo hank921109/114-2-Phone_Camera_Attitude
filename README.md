@@ -15,8 +15,9 @@
         1.  **絕對準確度**：Pitch 角度在水平拍攝下趨近於 0°（誤差 < 3°）。
         2.  **相對追蹤 (Relative Tracking)**：在動態序列中，Yaw 與 Roll 的相對變化誤差 < 1.5°。
     *   **測試步驟 (DOE)**：
-        1.  **本地標竿測試**：`python3 scripts/local_benchmark.py` 驗證室內場景。
-        2.  **KITTI 序列驗證**：`python3 scripts/kitti_benchmark.py` 評估道路環境。
+        *   **統一啟動介面**：直接執行 `python3 main.py`，系統將彈出輕量級 GUI 啟動選單 (支援 Raspi 等環境)。
+        *   若選擇**單鏡頭**選項並開啟相片/影片，系統會自動載入單鏡頭消失點管線。
+        *   若選擇**雙鏡頭**選項並開啟資料夾 (例如 KITTI Dataset)，系統會自動載入雙鏡頭視覺里程計管線。
 
 ---
 
@@ -126,6 +127,8 @@ graph TD
 **雙鏡頭輸入 (Stereo Visual Odometry 軌跡與誤差驗證)**：
 ![Visual Odometry](docs/images/visual_odometry.gif)
 **註**：`Prediction` (紅線) 為推估軌跡，`Ground Truth` (藍線) 為真實軌跡；下方圖表同步顯示 Yaw、Pitch、Roll 變化以利 ATE (Absolute Trajectory Error) / RPE (Relative Pose Error) 誤差對比。
+
+![Visual Odometry 路口轉彎](visual_odometry/assets/visual_odometry.png)
 
 **效能優化歷程**：
 

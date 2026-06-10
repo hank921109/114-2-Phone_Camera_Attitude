@@ -126,6 +126,62 @@ def process_video(video_path: str, output_path: str, stride: int = 2):
     cap.release(); out.release()
 
 
+def launch_gui_menu():
+    import tkinter as tk
+    from tkinter import filedialog, messagebox
+
+    root = tk.Tk()
+    root.title("System Launcher")
+    root.geometry("350x180")
+    
+    def on_single_cam():
+        filepath = filedialog.askopenfilename(
+            title="Select Image or Video (Single Camera)",
+            filetypes=[("Media Files", "*.jpg *.jpeg *.png *.mp4 *.avi *.mov")]
+        )
+        if filepath:
+            root.destroy()
+            if os.path.splitext(filepath)[1].lower() in ['.mp4', '.avi', '.mov']:
+                output_path = os.path.join("outputs", f"result_{os.path.basename(filepath)}")
+                os.makedirs("outputs", exist_ok=True)
+                process_video(filepath, output_path, stride=5)
+            else:
+                output_path = os.path.join("outputs", f"result_{os.path.basename(filepath)}")
+                os.makedirs("outputs", exist_ok=True)
+                process_single_image(filepath, output_path)
+            
+    def on_stereo():
+        dirpath = filedialog.askdirectory(title="Select KITTI Dataset Directory (Stereo)")
+        if dirpath:
+            root.destroy()
+            
+            # Setup path for visual_odometry
+            vo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'visual_odometry'))
+            vo_src_path = os.path.join(vo_path, 'src')
+            if vo_src_path not in sys.path:
+                sys.path.append(vo_src_path)
+            
+            try:
+                # Add visual odometry script path so we can import main
+                vo_script_path = os.path.join(vo_path, 'scripts')
+                if vo_script_path not in sys.path:
+                    sys.path.append(vo_script_path)
+                import main as vo_main
+                vo_main.main(db_path_str=dirpath)
+            except Exception as e:
+                print(f"Error launching Visual Odometry: {e}")
+
+    lbl = tk.Label(root, text="Select Pipeline Mode", font=("Helvetica", 14))
+    lbl.pack(pady=15)
+    
+    btn1 = tk.Button(root, text="單鏡頭消失點管線 (選擇檔案)", command=on_single_cam, width=30, height=2)
+    btn1.pack(pady=5)
+    
+    btn2 = tk.Button(root, text="雙鏡頭視覺里程計 (選擇資料夾)", command=on_stereo, width=30, height=2)
+    btn2.pack(pady=5)
+    
+    root.mainloop()
+
 def main():
     if len(sys.argv) > 1:
         input_path = sys.argv[1]
@@ -137,11 +193,6 @@ def main():
         else:
             process_single_image(input_path, output_path)
     else:
-        try:
-            from vp_calib.gui import CalibrationApp
-            from PyQt5 import QtWidgets
-            app = QtWidgets.QApplication(sys.argv)
-            window = CalibrationApp(); window.show(); sys.exit(app.exec_())
-        except ImportError: pass
+        launch_gui_menu()
 
 if __name__ == "__main__": main()

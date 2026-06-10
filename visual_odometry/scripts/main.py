@@ -20,12 +20,12 @@ from odo.utils import compute_bf, decompose_projection_matrix
 from odo.viz import Plotter, VideoSaver
 
 
-def main():
+def main(db_path_str: str = "/home/nvidia/Documents/VanishingPointCameraCalibration/visual_odometry/KITTI/dataset"):
     cv2.setUseOptimized(True)
     cv2.ocl.setUseOpenCL(True)
 
     # Load the KITTI dataset
-    db_path = Path("/home/nvidia/Documents/VanishingPointCameraCalibration/visual_odometry/KITTI/dataset")
+    db_path = Path(db_path_str)
     dataset = KittiDataset(db_path)
     dataset.current_sequence_name = "00"
 
