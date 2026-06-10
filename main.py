@@ -118,12 +118,18 @@ def process_video(video_path: str, output_path: str, stride: int = 2):
                 proc_fps = 1.0 / (time.time() - start_time) if (time.time() - start_time) > 0 else 0
                 cv2.putText(processed_frame, f"Proc FPS: {proc_fps:.1f}", (20, 360), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
                 out.write(processed_frame)
+                
+                # 跳出即時處理畫面 (Live processing window)
+                cv2.imshow("Live Video Processing", processed_frame)
+                if cv2.waitKey(1) & 0xFF == 27:  # Press 'ESC' to stop
+                    break
             except Exception as e:
                 print(f"Error processing video frame: {e}")
                 out.write(frame)
         count += 1
         if count > 500: break
     cap.release(); out.release()
+    cv2.destroyAllWindows()
 
 
 def launch_gui_menu():
@@ -134,10 +140,16 @@ def launch_gui_menu():
     root.title("System Launcher")
     root.geometry("350x180")
     
+    kitti_base = os.path.abspath(os.path.join(os.path.dirname(__file__), 'visual_odometry', 'KITTI', 'dataset'))
+    kitti_img_dir = os.path.join(kitti_base, 'sequences', '00', 'image_0')
+    if not os.path.exists(kitti_img_dir):
+        kitti_img_dir = os.path.dirname(__file__)
+        
     def on_single_cam():
         filepath = filedialog.askopenfilename(
             title="Select Image or Video (Single Camera)",
-            filetypes=[("Media Files", "*.jpg *.jpeg *.png *.mp4 *.avi *.mov")]
+            initialdir=kitti_img_dir,
+            filetypes=[("Media Files", "*.png *.jpg *.jpeg *.mp4 *.avi *.mov")]
         )
         if filepath:
             root.destroy()
@@ -151,7 +163,10 @@ def launch_gui_menu():
                 process_single_image(filepath, output_path)
             
     def on_stereo():
-        dirpath = filedialog.askdirectory(title="Select KITTI Dataset Directory (Stereo)")
+        dirpath = filedialog.askdirectory(
+            title="Select KITTI Dataset Directory (Stereo)",
+            initialdir=kitti_base
+        )
         if dirpath:
             root.destroy()
             
