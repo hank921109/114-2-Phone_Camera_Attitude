@@ -23,7 +23,7 @@ from odo.viz import Plotter, VideoSaver
 
 DEFAULT_DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "KITTI", "dataset"))
 
-def main(db_path_str: str = DEFAULT_DB_PATH):
+def main(db_path_str: str = DEFAULT_DB_PATH, max_frames: int = 200):
     cv2.setUseOptimized(True)
     cv2.ocl.setUseOpenCL(True)
 
@@ -113,7 +113,7 @@ def main(db_path_str: str = DEFAULT_DB_PATH):
     processed_frames = 0
 
     # Run the pipeline
-    for i in tqdm(range(1, min(36, len(dataset))), desc="Running the pipeline"):
+    for i in tqdm(range(1, min(max_frames + 1, len(dataset))), desc="Running the pipeline"):
         item = dataset[i]
         left_image = cv2.imread(str(item.left_image), cv2.IMREAD_GRAYSCALE)
         right_image = cv2.imread(str(item.right_image), cv2.IMREAD_GRAYSCALE)
@@ -180,7 +180,6 @@ def main(db_path_str: str = DEFAULT_DB_PATH):
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) > 1:
-        main(sys.argv[1])
-    else:
-        main()
+    db_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_DB_PATH
+    max_frames = int(sys.argv[2]) if len(sys.argv) > 2 else 200
+    main(db_path, max_frames)

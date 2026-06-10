@@ -180,6 +180,11 @@ def launch_gui_menu():
             initialdir=kitti_base
         )
         if dirpath:
+            try:
+                max_frames = int(entry_frames.get())
+            except ValueError:
+                max_frames = 200
+                
             root.destroy()
             
             # Setup path for visual_odometry
@@ -191,7 +196,7 @@ def launch_gui_menu():
                 import subprocess
                 env = os.environ.copy()
                 env["PYTHONPATH"] = f"{vo_src_path}:{env.get('PYTHONPATH', '')}"
-                subprocess.run([sys.executable, vo_script_path, dirpath], env=env)
+                subprocess.run([sys.executable, vo_script_path, dirpath, str(max_frames)], env=env)
             except Exception as e:
                 print(f"Error launching Visual Odometry: {e}")
 
