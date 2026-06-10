@@ -86,10 +86,11 @@ def process_single_image(img_path: str, output_path: Optional[str] = None):
         if output_path:
             cv2.imwrite(output_path, cv2.cvtColor(processed_frame, cv2.COLOR_RGB2BGR))
             print(f"Result saved to {output_path}")
-        else:
-            cv2.imshow("Calibration Result", cv2.cvtColor(processed_frame, cv2.COLOR_RGB2BGR))
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+            
+        # 自動開啟對應的結果圖片 (Auto-open the result image)
+        cv2.imshow("Calibration Result", cv2.cvtColor(processed_frame, cv2.COLOR_RGB2BGR))
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
     except Exception as e:
         print(f"Error processing image: {e}")
 
