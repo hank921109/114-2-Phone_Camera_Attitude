@@ -8,7 +8,7 @@
 *   **限制**：需 Python 3.10+ 環境，依賴 OpenCV 與 NumPy。
 *   **界面**：
     1. 輸入室內相片，輸出 Yaw, Pitch, Roll 數值並標示笛卡爾座標。
-    2. 輸入雙鏡頭行車影像，輸出 3D 軌跡圖與 ATE、RPE 誤差。
+    2. 輸入雙鏡頭行車影像，輸出 3D 軌跡圖與 ATE (Absolute Trajectory Error) / RPE (Relative Pose Error) 誤差。
 *   **驗收計畫 (Verification Plan)**：
     *   **測試資料**：`data/samples/rt0-7.jpg`（室內走廊）與 KITTI Odometry 序列。
     *   **預期輸出**：
@@ -43,16 +43,18 @@
 | **3. 驗證 (Verification)** | 統計 Inliers 並計算角度殘差 | **NumPy Matrix Multiply** (矩陣化運算) |
 | **4. 精煉 (Refinement)** | 使用投票線段重新求解交點 | **SVD (Singular Value Decomposition)** 奇異值分解 |
 
+![RANSAC 採樣與驗證原理圖](https://docs.mrpt.org/reference/latest/_images/math_ransac_examples_screenshot.png)
+
 #### 演算法拆解 (Algorithm Breakdown)
 ```mermaid
 graph TD
     System[Vanishing Point Calibration System]
     
     subgraph Single Camera Calibration
-        System --> PRE[Image Preprocessing]
-        PRE --> DET[Feature Detection]
-        DET --> RAN[Model Estimation]
-        RAN --> POS[Orientation Solving]
+        System -- "Raw Image" --> PRE[Image Preprocessing]
+        PRE -- "Filtered Image" --> DET[Feature Detection]
+        DET -- "Line Segments" --> RAN[Model Estimation]
+        RAN -- "Vanishing Points" --> POS[Orientation Solving]
 
         PRE --- PRE_Desc["1. CLAHE Contrast<br/>2. Gaussian Blur"]
         DET --- DET_Desc["1. Otsu Binarization<br/>2. Adaptive Canny<br/>3. Probabilistic Hough"]
@@ -61,13 +63,13 @@ graph TD
     end
 
     subgraph Stereo Visual Odometry
-        System --> VO_PRE[Stereo Processing]
-        VO_PRE --> VO_FEAT[Feature Tracking]
-        VO_FEAT --> VO_MOT[Motion Estimation]
+        System -- "Stereo Image Pair" --> VO_PRE[Stereo Processing]
+        VO_PRE -- "Disparity Map & Images" --> VO_FEAT[Feature Tracking]
+        VO_FEAT -- "Matched Keypoints" --> VO_MOT[Motion Estimation]
         
         VO_PRE --- VO_PRE_Desc["1. Undistortion & Rectification<br/>2. SGBM Disparity Map"]
         VO_FEAT --- VO_FEAT_Desc["1. ORB Keypoints<br/>2. FLANN/Brute-Force Matching"]
-        VO_MOT --- VO_MOT_Desc["1. 3D-2D Projection<br/>2. Perspective-n-Point RANSAC<br/>3. Trajectory Concatenation"]
+        VO_MOT --- VO_MOT_Desc["1. 3D-2D Projection<br/>2. Perspective-n-Point RANSAC<br/>3. Trajectory Concatenation<br/>4. 起點座標初始化自 (0,0,0)"]
     end
 ```
 
@@ -79,7 +81,7 @@ graph TD
 | **Adaptive Canny** | 邊緣檢測演算法 | 提取結構化輪廓 | 結合 Otsu 門檻動態調整 Canny 的遲滯門檻 (Hysteresis Thresholding) |
 | **Probabilistic Hough** | 霍夫變換線段偵測 | 將邊緣點群聚合為幾何線段 | 透過 `minLineLength` 過濾短線段，保留建築與車道線結構 |
 | **Vectorized RANSAC** | 隨機抽樣一致演算法 | 從線段池中篩選出有效線段 | 利用 NumPy 廣播機制一次生成多組假設，提升運算效能 |
-| **Singular Value SVD** | 奇異值分解矩陣運算 | 從投票後的 Inlier 線段集中解出亞像素交點 | 建立超定齊次方程組，提取最小奇異值對應之特徵向量作為消失點座標 |
+| **Singular Value SVD** | 奇異值分解矩陣運算 | 從投票後的 Inlier 線段集中解出亞像素交點 | 建立超定齊次方程組 $A\mathbf{v} = \mathbf{0}$，透過 $A = U \Sigma V^T$ 提取最小奇異值對應之特徵向量 $\mathbf{v} = V_{[:, -1]}$ 作為消失點座標 |
 | **Manhattan World Ortho** | 曼哈頓世界正交化約束 | 確保三軸消失點在物理空間中互相垂直 | 透過 Cross Product 執行二次正交校準，確保旋轉矩陣之正規性 |
 | **Euler Decomposition** | 歐拉角分解演算法 | 從旋轉矩陣中提取 Yaw, Pitch, Roll 指標 | 基於相機座標系 (Z-Forward)，利用 atan2 函數處理矩陣項之比例關係 |
 | **SGBM** | 立體匹配與視差計算 | 從雙鏡頭影像獲取 3D 深度資訊 | 使用 Semi-Global Block Matching 建立視差圖 |
@@ -136,4 +138,4 @@ graph TD
 | :--- | :--- | :--- | :--- | :--- |
 | **特徵擷取** | SIFT -> ORB | ~3.1 -> ~13.0 | - | - |
 | **立體匹配** | SGBM -> Block Matching | ~13.0 -> 16.16 | 0.3133 m -> 0.1266 m | Block Matching 雜訊容忍度搭配特徵點追蹤，過濾 SGBM 產生之邊緣離群值 |
-| **追蹤與數學運算** | 光流追蹤 + Numba JIT + 平行運算 | 16.16 -> ~32.17 | 0.1266 m -> 0.1114 m | 採用 KLT 光流取代逐幀匹配，以 ThreadPool 平行處理視差，並利用 JIT 加速矩陣運算 |
+| **追蹤與數學運算** | 光流追蹤 + Numba JIT + 平行運算 | 16.16 -> ~22.17 | 0.1266 m -> 0.1114 m | 採用 KLT 光流取代逐幀匹配，以 ThreadPool 平行處理視差，並利用 JIT 加速矩陣運算 |
