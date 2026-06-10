@@ -94,7 +94,7 @@ def process_single_image(img_path: str, output_path: Optional[str] = None):
     except Exception as e:
         print(f"Error processing image: {e}")
 
-def process_video(video_path: str, output_path: str, stride: int = 2):
+def process_video(video_path: str, output_path: str, stride: int = 2, max_frames: int = 200):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened(): return
     width, height = int(cap.get(3)), int(cap.get(4))
@@ -128,7 +128,7 @@ def process_video(video_path: str, output_path: str, stride: int = 2):
                 print(f"Error processing video frame: {e}")
                 out.write(frame)
         count += 1
-        if count > 500: break
+        if count >= max_frames: break
     cap.release(); out.release()
     cv2.destroyAllWindows()
 
@@ -139,13 +139,19 @@ def launch_gui_menu():
 
     root = tk.Tk()
     root.title("System Launcher")
-    root.geometry("350x180")
+    root.geometry("380x250")
     
     kitti_base = os.path.abspath(os.path.join(os.path.dirname(__file__), 'visual_odometry', 'KITTI', 'dataset'))
     kitti_img_dir = os.path.join(kitti_base, 'sequences', '00', 'image_0')
     if not os.path.exists(kitti_img_dir):
         kitti_img_dir = os.path.dirname(__file__)
         
+    lbl_frames = tk.Label(root, text="影片處理影格數 (預設 200):")
+    lbl_frames.pack(pady=(10, 0))
+    entry_frames = tk.Entry(root)
+    entry_frames.insert(0, "200")
+    entry_frames.pack(pady=(0, 10))
+
     def on_single_cam():
         filepath = filedialog.askopenfilename(
             title="Select Image or Video (Single Camera)",
@@ -153,11 +159,16 @@ def launch_gui_menu():
             filetypes=[("Media Files", "*.png *.jpg *.jpeg *.mp4 *.avi *.mov")]
         )
         if filepath:
+            try:
+                max_frames = int(entry_frames.get())
+            except ValueError:
+                max_frames = 200
+                
             root.destroy()
             if os.path.splitext(filepath)[1].lower() in ['.mp4', '.avi', '.mov']:
                 output_path = os.path.join("outputs", f"result_{os.path.basename(filepath)}")
                 os.makedirs("outputs", exist_ok=True)
-                process_video(filepath, output_path, stride=5)
+                process_video(filepath, output_path, stride=5, max_frames=max_frames)
             else:
                 output_path = os.path.join("outputs", f"result_{os.path.basename(filepath)}")
                 os.makedirs("outputs", exist_ok=True)
