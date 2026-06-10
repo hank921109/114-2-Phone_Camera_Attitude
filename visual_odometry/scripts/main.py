@@ -173,4 +173,8 @@ def main(db_path_str: str = "/home/nvidia/Documents/VanishingPointCameraCalibrat
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if len(sys.argv) > 1:
+        main(sys.argv[1])
+    else:
+        main()

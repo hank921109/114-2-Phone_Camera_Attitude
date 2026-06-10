@@ -173,16 +173,13 @@ def launch_gui_menu():
             # Setup path for visual_odometry
             vo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'visual_odometry'))
             vo_src_path = os.path.join(vo_path, 'src')
-            if vo_src_path not in sys.path:
-                sys.path.append(vo_src_path)
+            vo_script_path = os.path.join(vo_path, 'scripts', 'main.py')
             
             try:
-                # Add visual odometry script path so we can import main
-                vo_script_path = os.path.join(vo_path, 'scripts')
-                if vo_script_path not in sys.path:
-                    sys.path.append(vo_script_path)
-                import main as vo_main
-                vo_main.main(db_path_str=dirpath)
+                import subprocess
+                env = os.environ.copy()
+                env["PYTHONPATH"] = f"{vo_src_path}:{env.get('PYTHONPATH', '')}"
+                subprocess.run([sys.executable, vo_script_path, dirpath], env=env)
             except Exception as e:
                 print(f"Error launching Visual Odometry: {e}")
 
