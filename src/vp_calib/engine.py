@@ -36,7 +36,7 @@ def refine_vp_svd(lines: np.ndarray) -> np.ndarray:
     if abs(vp[2]) < EPS: return vp / (np.linalg.norm(vp[:2]) + EPS)
     return vp / vp[2]
 
-def run_vectorized_ransac(lines: np.ndarray, iterations: int, threshold: float, ignore_mask: Optional[np.ndarray] = None) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+def run_vectorized_ransac(lines: np.ndarray, iterations: int, threshold: float, ignore_mask: Optional[np.ndarray] = None, vp_type: str = None, pp: np.ndarray = None) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     num_lines = lines.shape[0]
     if num_lines < 2: return None, None
     valid_indices = np.where(~ignore_mask)[0] if ignore_mask is not None else np.arange(num_lines)
@@ -47,6 +47,15 @@ def run_vectorized_ransac(lines: np.ndarray, iterations: int, threshold: float, 
     hyp = np.cross(L1, L2)
     mask = np.abs(hyp[:, 2]) > EPS
     hyp = hyp[mask]; hyp /= (hyp[:, 2:3] + EPS)
+    
+    # [改良 2] Spatial Constraints for Indoor Environments
+    if vp_type == 'forward' and pp is not None:
+        dist = np.linalg.norm(hyp[:, :2] - pp, axis=1)
+        hyp = hyp[dist < pp[0] * 1.0] # Forward VP is near center
+    elif vp_type == 'vertical' and pp is not None:
+        dist = np.linalg.norm(hyp[:, :2] - pp, axis=1)
+        hyp = hyp[dist > pp[0] * 1.5] # Vertical VP is far from center
+        
     if len(hyp) == 0: return None, None
     line_dirs = lines[:, 1] - lines[:, 0]
     v_dirs = hyp[:, np.newaxis, :2] - lines[np.newaxis, :, 0, :2]
@@ -90,14 +99,16 @@ def get_vp_inliers(image_input: Any, contrast: float, sharpness: float, sigma: f
     y_mean = np.mean(lines_s[:, :, 1], axis=1)
     
     # [改良 1] 更精細的語意篩選
-    # 垂直池: 嚴格垂直線 (dy > dx*3), 排除天空頂端
-    v_mask = (dy > dx * 3.0) & (y_mean < sh * 0.8)
-    # 車道線池: 位於影像中心偏下，斜率指向前方 (dy > dx*0.5)
-    road_mask = (y_mean > sh * 0.45) & (dy > dx * 0.5) & (~v_mask)
+    # 垂直池: 嚴格垂直線 (dy > dx * 2.0)
+    v_mask = (dy > dx * 2.0)
+    # 車道/深度池: 非垂直線
+    road_mask = (~v_mask)
     
-    # RANSAC
-    _, i_y = run_vectorized_ransac(lines_s, iterations, threshold, ignore_mask=~v_mask)
-    _, i_z = run_vectorized_ransac(lines_s, iterations, threshold, ignore_mask=~road_mask)
+    pp_s = np.array([sw/2, sh/2])
+    
+    # RANSAC (導入空間約束)
+    _, i_y = run_vectorized_ransac(lines_s, iterations, threshold, ignore_mask=~v_mask, vp_type='vertical', pp=pp_s)
+    _, i_z = run_vectorized_ransac(lines_s, iterations, threshold, ignore_mask=~road_mask, vp_type='forward', pp=pp_s)
     
     def compute_vp_from_mask(m):
         if m is None or np.sum(m) < 2: return np.array([0, 0, 0.0])
@@ -106,7 +117,7 @@ def get_vp_inliers(image_input: Any, contrast: float, sharpness: float, sigma: f
 
     vy, vz = compute_vp_from_mask(i_y), compute_vp_from_mask(i_z)
     
-    # [改良 2] Fallback 策略：若偵測不到 Vz，使用影像中心偏上點作為前進方向
+    # [改良 3] Fallback 策略：若偵測不到 Vz，使用影像中心偏上點作為前進方向
     if np.linalg.norm(vz[:2]) < 1e-3 or vz[2] < 0.5:
         vz = np.array([w/2, h/2, 1.0])
     if np.linalg.norm(vy[:2]) < 1e-3: vy = np.array([0, 1, 0.0])
