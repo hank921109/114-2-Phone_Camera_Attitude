@@ -69,7 +69,7 @@ graph TD
         
         VO_PRE --- VO_PRE_Desc["1. Undistortion & Rectification<br/>2. SGBM Disparity Map"]
         VO_FEAT --- VO_FEAT_Desc["1. ORB Keypoints<br/>2. FLANN/Brute-Force Matching"]
-        VO_MOT --- VO_MOT_Desc["1. 3D-2D Projection<br/>2. Perspective-n-Point RANSAC<br/>3. Trajectory Concatenation<br/>4. 起點座標初始化自 (0,0,0)"]
+        VO_MOT --- VO_MOT_Desc["1. 3D-2D Projection<br/>2. Perspective-n-Point RANSAC<br/>3. Trajectory Concatenation<br/>4. 軌跡起點初始化 (對齊 KITTI 首影格之 GT 原點)"]
     end
 ```
 
