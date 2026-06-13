@@ -42,8 +42,8 @@ RANSAC 的運作方式類似於「**隨機猜測 + 多數決**」。在真實影
 | :--- | :--- | :--- |
 | **1. 採樣 (Sampling)** | **隨機挑選**：從畫面中隨機選出兩條線，假設它們是正確的邊緣。 | **Vectorized Batch Sampling** (批次生成 2000 組) |
 | **2. 假設 (Hypothesis)** | **尋找交點**：將這兩條線延伸並算出交點，暫時將其當作「消失點」。 | **Homogeneous Cross Product** (齊次座標外積) |
-| **3. 驗證 (Verification)** | **多數決投票**：檢查畫面中其他的線，計算有多少條也指向這個交點。支持的線越多，代表這個交點越可靠（支持的線稱為 Inliers）。 | **NumPy Matrix Multiply** (矩陣化運算) |
-| **4. 精煉 (Refinement)** | **綜合重算**：重複上述動作數千次，找出得票數最高的交點。最後把所有支持該點的線收集起來，精確算出最終座標。 | **SVD (Singular Value Decomposition)** 奇異值分解 |
+| **3. 驗證 (Verification)** | **多數決投票**：檢查其他線條。指向交點的稱為 **Inliers (真正線索/支持者)**；干擾判斷的雜訊稱為 **Outliers (來亂的干擾者)**。找出擁有最多支持者的交點。 | **NumPy Matrix Multiply** (矩陣化運算) |
+| **4. 精煉 (Refinement)** | **綜合重算**：重複數千次後找出最高票的交點。最後把所有 Inliers 集中起來，透過進階平均演算法求出一個滿足所有人的「最佳黃金交點」。 | **SVD (Singular Value Decomposition)** 奇異值分解 |
 
 ![RANSAC 採樣與驗證原理圖](https://docs.mrpt.org/reference/latest/_images/math_ransac_examples_screenshot.png)
 
@@ -79,7 +79,7 @@ graph TD
 | :--- | :--- | :--- | :--- |
 | **CLAHE** | 限制對比度自適應直方圖均衡化 | 增強影像局部對比度，提取陰影或過曝區域的邊緣 | 將影像分割為 8x8 局部區塊進行直方圖均衡，並限制對比度增益 |
 | **Gaussian Blur** | 高斯濾波 | 消除影像高頻噪點，防止邊緣檢測碎片化 | 利用 5x5 高斯核對影像執行卷積運算，在保留邊緣的同時平滑背景雜訊 |
-| **Otsu's Binarization** | 大津演算法門檻控制 | 為邊緣檢測尋找二值化門檻 | 計算影像直方圖，最大化類間變異數以分離背景與前景結構 |
+| **Otsu's Binarization** | 大津演算法門檻控制<br/><img src="https://miro.medium.com/v2/resize:fit:786/format:webp/1*xFEvGeeypWM0t8QD2r_szw.png" width="150"/> | 為邊緣檢測尋找二值化門檻 | 計算影像直方圖，最大化類間變異數以分離背景與前景結構 |
 | **Adaptive Canny** | 邊緣檢測演算法 | 提取結構化輪廓 | 結合 Otsu 門檻動態調整 Canny 的遲滯門檻 (Hysteresis Thresholding) |
 | **Probabilistic Hough** | 霍夫變換線段偵測 | 將邊緣點群聚合為幾何線段 | 透過 `minLineLength` 過濾短線段，保留建築與車道線結構 |
 | **Vectorized RANSAC** | 隨機抽樣一致演算法 | 從線段池中篩選出有效線段 | 利用 NumPy 廣播機制一次生成多組假設，提升運算效能 |
