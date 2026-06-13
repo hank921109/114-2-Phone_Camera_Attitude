@@ -182,8 +182,24 @@ def draw_axes_on_image(image: np.ndarray, vps: List[np.ndarray], origin_px: Unio
     return output_img
 
 def estimate_origin_from_inliers(image_shape: Tuple[int, ...], inlier_masks: List[np.ndarray], lines: np.ndarray) -> List[int]:
-    h, w = image_shape[:2]; return [w // 2, int(h * 0.85)]
-
+    h, w = image_shape[:2]
+    try:
+        if len(inlier_masks) >= 3 and inlier_masks[2] is not None:
+            iy_mask = inlier_masks[2]
+            v_lines = lines[iy_mask]
+            if len(v_lines) > 0:
+                # Find the lowest point of the vertical lines (wall corner at the floor)
+                max_y = -1
+                best_pt = [w // 2, int(h * 0.85)]
+                for line in v_lines:
+                    for pt in line:
+                        if pt[1] > max_y:
+                            max_y = pt[1]
+                            best_pt = pt.tolist()
+                return [int(best_pt[0]), int(best_pt[1])]
+    except Exception:
+        pass
+    return [w // 2, int(h * 0.85)]
 def determine_focal_length(vps: List[np.ndarray], image: np.ndarray) -> List[float]:
     default_focal = 715.0
     if len(vps) >= 3 and vps[1] is not None and vps[2] is not None:
