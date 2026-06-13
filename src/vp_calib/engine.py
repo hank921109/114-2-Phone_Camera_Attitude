@@ -5,8 +5,6 @@ import numpy as np
 import cv2
 from typing import List, Tuple, Optional, Union, Any
 
-EPS = 1e-10
-
 def read_image(path: str) -> Optional[np.ndarray]:
     image = cv2.imread(path)
     if image is not None:
@@ -14,247 +12,255 @@ def read_image(path: str) -> Optional[np.ndarray]:
     return image
 
 def image_enhance(image: np.ndarray, contrast: float, sharpness: float) -> np.ndarray:
-    return cv2.convertScaleAbs(image, alpha=1.2, beta=5)
+    return cv2.convertScaleAbs(image, alpha=1.3, beta=5)
 
 def get_hough_lines_cv(image: np.ndarray, line_length: int, line_gap: int) -> Tuple[np.ndarray, np.ndarray]:
-    if len(image.shape) == 3: gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    else: gray = image
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    gray_clahe = clahe.apply(gray)
-    high_thresh, _ = cv2.threshold(gray_clahe, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    edges = cv2.Canny(gray_clahe, high_thresh * 0.4, high_thresh, apertureSize=3)
-    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=45, minLineLength=line_length, maxLineGap=line_gap)
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    else:
+        gray = image
+    edges = cv2.Canny(gray, 40, 120, apertureSize=3)
+    lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=50, 
+                            minLineLength=line_length, maxLineGap=line_gap)
     if lines is None: return np.array([]), edges
     return lines.reshape(-1, 2, 2), edges
 
 def refine_vp_svd(lines: np.ndarray) -> np.ndarray:
-    if len(lines) < 2: return np.array([0, 0, 0.0])
-    pts1, pts2 = lines[:, 0], lines[:, 1]
-    L = np.cross(np.c_[pts1, np.ones(len(pts1))], np.c_[pts2, np.ones(len(pts2))])
-    _, _, Vh = np.linalg.svd(L)
-    vp = Vh[-1, :]
-    if abs(vp[2]) < EPS: return vp / (np.linalg.norm(vp[:2]) + EPS)
+    if len(lines) < 2: return np.array([0, 0, 1.0])
+    pts1 = np.concatenate([lines[:, 0], np.ones((len(lines), 1))], axis=1)
+    pts2 = np.concatenate([lines[:, 1], np.ones((len(lines), 1))], axis=1)
+    L = np.cross(pts1, pts2)
+    _, _, vh = np.linalg.svd(L)
+    vp = vh[-1, :]
+    if abs(vp[2]) < 1e-9: return vp
     return vp / vp[2]
 
-def run_vectorized_ransac(lines: np.ndarray, iterations: int, threshold: float, ignore_mask: Optional[np.ndarray] = None, vp_type: str = None, pp: np.ndarray = None) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+def estimate_origin_from_inliers(image_shape: Tuple[int, ...], inlier_masks: List[np.ndarray], lines: np.ndarray) -> List[int]:
+    """
+    自動估計物理原點：尋找影像下半部 X 軸與 Z 軸線段的交點，並確保其不超出螢幕。
+    """
+    h, w = image_shape[:2]
+    default_origin = [w // 2, int(h * 0.85)]
+    
+    if len(inlier_masks) < 3 or inlier_masks[0] is None or inlier_masks[2] is None:
+        return default_origin
+        
+    x_lines = lines[inlier_masks[0]]
+    z_lines = lines[inlier_masks[2]]
+    
+    # 過濾：只看影像下半部的線段
+    x_bottom = x_lines[np.mean(x_lines[:, :, 1], axis=1) > h * 0.4]
+    z_bottom = z_lines[np.mean(z_lines[:, :, 1], axis=1) > h * 0.4]
+    
+    if len(x_bottom) == 0 or len(z_bottom) == 0:
+        return default_origin
+        
+    # 取最長的前 3 條線求加權交點
+    lx_idxs = np.argsort(np.linalg.norm(x_bottom[:, 1] - x_bottom[:, 0], axis=1))[-3:]
+    lz_idxs = np.argsort(np.linalg.norm(z_bottom[:, 1] - z_bottom[:, 0], axis=1))[-3:]
+    
+    intersections = []
+    for i in lx_idxs:
+        for j in lz_idxs:
+            L1 = np.cross(np.append(x_bottom[i, 0], 1), np.append(x_bottom[i, 1], 1))
+            L2 = np.cross(np.append(z_bottom[j, 0], 1), np.append(z_bottom[j, 1], 1))
+            pt = np.cross(L1, L2)
+            if abs(pt[2]) > 1e-9:
+                pt /= pt[2]
+                # 交點必須在合理範圍內
+                if 0 <= pt[0] <= w and h * 0.3 <= pt[1] < h - 10:
+                    intersections.append(pt[:2])
+    
+    if not intersections:
+        return default_origin
+        
+    origin = np.mean(intersections, axis=0).astype(int)
+    return [int(origin[0]), int(origin[1])]
+
+def draw_axes_on_image(image: np.ndarray, vps: List[np.ndarray], origin_px: Union[List[int], np.ndarray], 
+                       length: int = 300, attitude: Optional[np.ndarray] = None) -> np.ndarray:
+    output_img = image.copy()
+    h, w = output_img.shape[:2]
+    colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)] # X, Y, Z
+    labels = ['X', 'Y', 'Z']
+    origin = np.array(origin_px, dtype=np.int32)
+    
+    for i, vp in enumerate(vps):
+        if i >= len(colors) or vp is None or np.all(vp[:2] == 0): continue
+        vp_pt = vp[:2]
+        direction = vp_pt - origin
+        dist = np.linalg.norm(direction)
+        
+        if dist > 1e-6:
+            unit_dir = direction / dist
+            
+            # --- 自動調整長度，確保不超出螢幕 ---
+            # 找出與螢幕邊界的交點，動態縮放 length
+            current_len = length
+            end_point_raw = origin + unit_dir * current_len
+            
+            # 邊界限制檢查 (留 20px 邊距給 Label)
+            margin = 30
+            if end_point_raw[0] < margin or end_point_raw[0] > w - margin or \
+               end_point_raw[1] < margin or end_point_raw[1] > h - margin:
+                
+                # 計算縮放比例
+                scale_factors = []
+                if unit_dir[0] < 0: scale_factors.append((margin - origin[0]) / unit_dir[0])
+                elif unit_dir[0] > 0: scale_factors.append((w - margin - origin[0]) / unit_dir[0])
+                if unit_dir[1] < 0: scale_factors.append((margin - origin[1]) / unit_dir[1])
+                elif unit_dir[1] > 0: scale_factors.append((h - margin - origin[1]) / unit_dir[1])
+                
+                if scale_factors:
+                    current_len = min(current_len, min(scale_factors))
+            
+            end_point = (origin + unit_dir * current_len).astype(np.int32)
+            cv2.arrowedLine(output_img, tuple(origin), tuple(end_point), colors[i], 4, tipLength=0.1)
+            
+            # 確保 Label 也在螢幕內
+            label_pos = tuple(end_point)
+            cv2.putText(output_img, labels[i], label_pos, cv2.FONT_HERSHEY_SIMPLEX, 1.2, colors[i], 3)
+            
+    if attitude is not None:
+        yaw, pitch, roll = attitude
+        overlay = output_img.copy()
+        cv2.rectangle(overlay, (10, 10), (700, 300), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.5, output_img, 0.5, 0, output_img)
+        cv2.putText(output_img, f"Yaw:   {yaw:.2f}", (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 2.4, (0, 255, 255), 6)
+        cv2.putText(output_img, f"Pitch: {pitch:.2f}", (20, 160), cv2.FONT_HERSHEY_SIMPLEX, 2.4, (0, 255, 255), 6)
+        cv2.putText(output_img, f"Roll:  {roll:.2f}", (20, 240), cv2.FONT_HERSHEY_SIMPLEX, 2.4, (0, 255, 255), 6)
+    return output_img
+
+def run_vectorized_ransac(lines: np.ndarray, iterations: int, threshold: float, 
+                          ignore_mask: Optional[np.ndarray] = None) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
     num_lines = lines.shape[0]
     if num_lines < 2: return None, None
     valid_indices = np.where(~ignore_mask)[0] if ignore_mask is not None else np.arange(num_lines)
     if len(valid_indices) < 2: return None, None
-    idx_pairs = np.random.choice(valid_indices, size=(min(iterations, 2000), 2), replace=True)
-    L1 = np.cross(np.c_[lines[idx_pairs[:,0],0], np.ones(len(idx_pairs))], np.c_[lines[idx_pairs[:,0],1], np.ones(len(idx_pairs))])
-    L2 = np.cross(np.c_[lines[idx_pairs[:,1],0], np.ones(len(idx_pairs))], np.c_[lines[idx_pairs[:,1],1], np.ones(len(idx_pairs))])
-    hyp = np.cross(L1, L2)
-    mask = np.abs(hyp[:, 2]) > EPS
-    hyp = hyp[mask]; hyp /= (hyp[:, 2:3] + EPS)
-    
-    # [改良 2] Spatial Constraints for Indoor Environments
-    if vp_type == 'forward' and pp is not None:
-        dist = np.linalg.norm(hyp[:, :2] - pp, axis=1)
-        hyp = hyp[dist < pp[0] * 1.0] # Forward VP is near center
-    elif vp_type == 'vertical' and pp is not None:
-        dist = np.linalg.norm(hyp[:, :2] - pp, axis=1)
-        hyp = hyp[dist > pp[0] * 1.5] # Vertical VP is far from center
-        
-    if len(hyp) == 0: return None, None
-    line_dirs = lines[:, 1] - lines[:, 0]
-    v_dirs = hyp[:, np.newaxis, :2] - lines[np.newaxis, :, 0, :2]
-    cos_theta = np.abs(np.sum(v_dirs * line_dirs[np.newaxis], axis=2) / (np.linalg.norm(v_dirs, axis=2) * np.linalg.norm(line_dirs, axis=1) + EPS))
-    in_mat = cos_theta > math.cos(threshold * np.pi / 180.0)
-    best_idx = np.argmax(np.sum(in_mat, axis=1))
-    return hyp[best_idx], in_mat[best_idx]
+    idx_pairs = np.random.choice(valid_indices, size=(iterations, 2), replace=True)
+    pts1 = np.concatenate([lines[idx_pairs[:, 0], 0], np.ones((iterations, 1))], axis=1)
+    pts2 = np.concatenate([lines[idx_pairs[:, 0], 1], np.ones((iterations, 1))], axis=1)
+    pts3 = np.concatenate([lines[idx_pairs[:, 1], 0], np.ones((iterations, 1))], axis=1)
+    pts4 = np.concatenate([lines[idx_pairs[:, 1], 1], np.ones((iterations, 1))], axis=1)
+    L1, L2 = np.cross(pts1, pts2), np.cross(pts3, pts4)
+    hypotheses = np.cross(L1, L2)
+    mask = np.abs(hypotheses[:, 2]) > 1e-8
+    hypotheses = hypotheses[mask]
+    if len(hypotheses) == 0: return None, None
+    hypotheses /= hypotheses[:, 2:3]
+    vp_dirs = hypotheses[:, np.newaxis, :2] - lines[np.newaxis, :, 0, :2]
+    line_dirs = lines[:, 1, :] - lines[:, 0, :]
+    mag_prod = np.linalg.norm(vp_dirs, axis=2) * np.linalg.norm(line_dirs, axis=1)[np.newaxis, :]
+    mag_prod[mag_prod == 0] = 1e-5
+    cos_theta = np.abs(np.sum(vp_dirs * line_dirs[np.newaxis, :, :], axis=2) / mag_prod)
+    inliers_matrix = cos_theta > math.cos(threshold * np.pi / 180.0)
+    if ignore_mask is not None: inliers_matrix[:, ignore_mask] = False
+    best_idx = np.argmax(np.sum(inliers_matrix, axis=1))
+    return hypotheses[best_idx], inliers_matrix[best_idx]
 
 def get_vp_inliers(image_input: Any, contrast: float, sharpness: float, sigma: float, 
                    iterations: int, line_len: int, line_gap: int, threshold: float, 
-                   processing_width: int = 960) -> Tuple[List, List, List]:
-    """
-    Detects vanishing points and their inlier lines using RANSAC.
-    
-    Args:
-        image_input: Path to the image or numpy array of the image.
-        contrast: Contrast enhancement factor.
-        sharpness: Sharpness enhancement factor.
-        sigma: Gaussian blur sigma.
-        iterations: Number of RANSAC iterations.
-        line_len: Minimum line length for Hough transform.
-        line_gap: Maximum line gap for Hough transform.
-        threshold: Inlier threshold angle in degrees.
-        processing_width: Width to resize image for processing.
-        
-    Returns:
-        Tuple containing inlier masks, vanishing points, and visualization data.
-    """
+                   processing_width: int = 640) -> Tuple[List, List, List]:
     full_image = read_image(image_input) if isinstance(image_input, str) else image_input
     if full_image is None: return [], [], [None, None, None, np.array([])]
     h, w = full_image.shape[:2]
     scale = processing_width / float(w)
-    img_s = cv2.resize(full_image, (processing_width, int(h * scale)))
-    sh, sw = img_s.shape[:2]
-    if sigma > 0: img_s = cv2.GaussianBlur(img_s, (int(sigma*2)|1, int(sigma*2)|1), sigma)
-    enh = image_enhance(img_s, contrast, sharpness)
-    lines_s, edges_s = get_hough_lines_cv(enh, line_len, line_gap)
-    if lines_s.size == 0: return [], [None, None, None], [full_image, enh, edges_s, np.array([])]
+    image_small = cv2.resize(full_image, (processing_width, int(h * scale)))
+    if sigma > 0:
+        k = int(sigma * 2) | 1
+        image_small = cv2.GaussianBlur(image_small, (k, k), sigma)
+    enhanced_img = image_enhance(image_small, contrast, sharpness)
+    lines_small, edges_small = get_hough_lines_cv(enhanced_img, line_len, line_gap)
+    if lines_small.size == 0: return [], [], [full_image, enhanced_img, edges_small, np.array([])]
     
-    dy, dx = np.abs(lines_s[:, 1, 1] - lines_s[:, 0, 1]), np.abs(lines_s[:, 1, 0] - lines_s[:, 0, 0])
-    y_mean = np.mean(lines_s[:, :, 1], axis=1)
+    _, i1 = run_vectorized_ransac(lines_small, iterations, threshold)
+    ignore = i1 if i1 is not None else np.zeros(len(lines_small), dtype=bool)
+    _, i2 = run_vectorized_ransac(lines_small, iterations, threshold, ignore_mask=ignore)
+    ignore = np.logical_or(ignore, i2) if i2 is not None else ignore
+    _, i3 = run_vectorized_ransac(lines_small, iterations, threshold, ignore_mask=ignore)
     
-    # [改良 1] 更精細的語意篩選
-    # 垂直池: 嚴格垂直線 (dy > dx * 2.0)
-    v_mask = (dy > dx * 2.0)
-    # 車道/深度池: 非垂直線
-    road_mask = (~v_mask)
-    
-    pp_s = np.array([sw/2, sh/2])
-    
-    # RANSAC (導入空間約束)
-    _, i_y = run_vectorized_ransac(lines_s, iterations, threshold, ignore_mask=~v_mask, vp_type='vertical', pp=pp_s)
-    _, i_z = run_vectorized_ransac(lines_s, iterations, threshold, ignore_mask=~road_mask, vp_type='forward', pp=pp_s)
-    
-    def compute_vp_from_mask(m):
-        if m is None or np.sum(m) < 2: return np.array([0, 0, 0.0])
-        v = refine_vp_svd(lines_s[m])
-        return np.array([v[0]/scale, v[1]/scale, v[2]])
+    def r_r(m, s):
+        if m is None or np.sum(m) < 2: return np.array([0, 0, 1.0])
+        v_s = refine_vp_svd(lines_small[m])
+        return np.array([v_s[0]/s, v_s[1]/s, 1.0])
 
-    vy, vz = compute_vp_from_mask(i_y), compute_vp_from_mask(i_z)
+    v_raw = [r_r(m, scale) for m in [i1, i2, i3]]
+    i_raw = [i1, i2, i3]
+    pp = np.array([full_image.shape[1]/2, full_image.shape[0]/2])
     
-    # [改良 3] Fallback 策略：若偵測不到 Vz，使用影像中心偏上點作為前進方向
-    if np.linalg.norm(vz[:2]) < 1e-3 or vz[2] < 0.5:
-        vz = np.array([w/2, h/2, 1.0])
-    if np.linalg.norm(vy[:2]) < 1e-3: vy = np.array([0, 1, 0.0])
-    
-    # X 軸預設 (會由後續 cross product 校正)
-    vx = np.array([1, 0, 0.0])
-    
-    return [None, i_z, i_y], [vx, vz, vy], [full_image, enh, edges_s, lines_s / scale]
+    # 智慧型軸向排序：
+    z_sc = [abs(np.dot((v[:2]-pp)/np.linalg.norm(v[:2]-pp), [0, 1])) if np.linalg.norm(v[:2]-pp)>1 else 0 for v in v_raw]
+    zi = np.argmax(z_sc); zv = v_raw.pop(zi); zi_m = i_raw.pop(zi)
+    d_pp = [np.linalg.norm(v[:2]-pp) for v in v_raw]
+    xi = np.argmin(d_pp); xv = v_raw.pop(xi); xi_m = i_raw.pop(xi)
+    yv = v_raw[0] if v_raw else np.array([0,0,1]); yi_m = i_raw[0] if i_raw else None
 
-def calculate_rotation_matrix(vps: List[np.ndarray], focal: float, pp: np.ndarray) -> np.ndarray:
-    def get_dir(v, default):
-        if v is None or np.linalg.norm(v[:2]) < 1e-3: return default
-        if abs(v[2]) < 0.1: return np.array([v[0], v[1], 0])
-        d = np.array([v[0]-pp[0], v[1]-pp[1], focal])
-        return d / (np.linalg.norm(d) + EPS)
-    uz = get_dir(vps[1], np.array([0, 0, 1.0])) # Forward
-    uy = get_dir(vps[2], np.array([0, 1, 0.0])) # Down
-    if uy[1] < 0: uy *= -1
-    
-    # [改良 3] 嚴格正交導出 X 軸 (Right)
-    ux = np.cross(uy, uz); ux /= (np.linalg.norm(ux) + EPS)
-    uz = np.cross(ux, uy); uz /= (np.linalg.norm(uz) + EPS) # 二次修正前向軸確保正交
-    
-    return np.column_stack((ux, uy, uz))
+    return [xi_m, yi_m, zi_m], [xv, yv, zv], [full_image, enhanced_img, edges_small, lines_small / scale]
 
-def reconstruct_vps(rm: np.ndarray, focal: float, pp: np.ndarray) -> List[np.ndarray]:
-    vps_perfect = []
-    for i in range(3):
-        v = rm[:, i]
-        vp = np.array([v[0]*focal + v[2]*pp[0], v[1]*focal + v[2]*pp[1], v[2]])
-        if abs(vp[2]) > 1e-5:
-            vp[:2] /= vp[2]
-            vp[2] = 1.0
-        vps_perfect.append(vp)
-    return vps_perfect
+class AttitudeSmoother:
+    def __init__(self, alpha: float = 0.5):
+        self.alpha, self.state = alpha, None
+    def smooth(self, attitude: np.ndarray) -> np.ndarray:
+        self.state = attitude if self.state is None else self.alpha * attitude + (1 - self.alpha) * self.state
+        return self.state
 
-def calculate_camera_attitude(r: np.ndarray) -> np.ndarray:
-    p = math.asin(-r[1, 2])
-    if abs(math.cos(p)) > EPS:
-        y, roll = math.atan2(r[0, 2], r[2, 2]), math.atan2(r[1, 0], r[1, 1])
-    else:
-        y, roll = math.atan2(-r[2, 0], r[0, 0]), 0
-    return np.array([y, p, roll]) * 180 / np.pi
-
-def adapt_to_kitti_frame(ypr: np.ndarray) -> np.ndarray:
-    y, p, r = ypr
-    return np.array([(y + 180) % 360 - 180, p, (r + 90) % 180 - 90])
-
-def draw_axes_on_image(image: np.ndarray, vps: List[np.ndarray], origin_px: Union[List[int], np.ndarray], 
-                       length: int = 300, attitude: Optional[np.ndarray] = None) -> np.ndarray:
-    output_img = image.copy(); h, w = output_img.shape[:2]
-    cv_colors = [(0, 0, 255), (255, 255, 0), (0, 255, 0)] # X:紅, Z:亮藍, Y:綠
-    labels = ['X', 'Z', 'Y']; origin = np.array(origin_px, dtype=np.float32)
-    for i, vp in enumerate(vps):
-        if i >= len(cv_colors) or vp is None: continue
-        if np.linalg.norm(vp[:2]) < 1e-3:
-            unit_dir = np.array([1, 0]) if i==0 else (np.array([0, -1]) if i==1 else np.array([0, 1]))
-        elif abs(vp[2]) < 0.1:
-            unit_dir = vp[:2] / (np.linalg.norm(vp[:2]) + EPS)
-        else:
-            unit_dir = (vp[:2] - origin) / (np.linalg.norm(vp[:2] - origin) + EPS)
-        cur_len = length * 1.5 if i == 1 else length * 0.8
-        end_point = (origin + unit_dir * cur_len).astype(np.int32)
-        cv2.arrowedLine(output_img, tuple(origin.astype(int)), tuple(end_point), cv_colors[i], 4, tipLength=0.2)
-        cv2.putText(output_img, labels[i], tuple(end_point), cv2.FONT_HERSHEY_SIMPLEX, h/400, cv_colors[i], 2)
-    if attitude is not None:
-        fs, lh = h / 450, int(h / 10)
-        overlay = output_img.copy()
-        cv2.rectangle(overlay, (5, 5), (int(w*0.35), lh*3 + 30), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.4, output_img, 0.6, 0, output_img)
-        for j, (name, val) in enumerate(zip(['Yaw', 'Pitch', 'Roll'], attitude)):
-            cv2.putText(output_img, f"Est. {name}: {val:.1f} deg", (15, lh*(j+1)), cv2.FONT_HERSHEY_SIMPLEX, fs, (0, 255, 255), 2)
-    return output_img
-
-def estimate_origin_from_inliers(image_shape: Tuple[int, ...], inlier_masks: List[np.ndarray], lines: np.ndarray) -> List[int]:
-    h, w = image_shape[:2]
-    ox, oy = int(w * 0.15), int(h * 0.85)
-    
-    if len(inlier_masks) >= 3 and inlier_masks[1] is not None and inlier_masks[2] is not None:
-        y_lines = lines[inlier_masks[2]]
-        if len(y_lines) > 0:
-            y_pts = y_lines.reshape(-1, 2)
-            dists = np.linalg.norm(y_pts - np.array([w*0.2, h*0.8]), axis=1)
-            best_pt = y_pts[np.argmin(dists)]
-            pad = int(min(w, h) * 0.15)
-            ox = int(np.clip(best_pt[0], pad, w - pad))
-            oy = int(np.clip(best_pt[1], pad, h - pad))
-    return [ox, oy]
+def choose_vanishing_points(vps: List[np.ndarray], image: np.ndarray) -> List[np.ndarray]:
+    return vps
 
 def determine_focal_length(vps: List[np.ndarray], image: np.ndarray) -> List[float]:
-    default_focal = 715.0
-    if len(vps) >= 3 and vps[1] is not None and vps[2] is not None:
-        v1, v2 = vps[1][:2], vps[2][:2]
-        cx, cy = (image.shape[1] / 2, image.shape[0] / 2) if image is not None else (0, 0)
-        dot_prod = (v1[0] - cx) * (v2[0] - cx) + (v1[1] - cy) * (v2[1] - cy)
-        if dot_prod < -EPS:
-            return [math.sqrt(-dot_prod)]
-    return [default_focal]
+    pp = [image.shape[1] / 2, image.shape[0] / 2]
+    v1, v2 = vps[0], vps[2] 
+    if np.linalg.norm(v1[:2]) < 1 or np.linalg.norm(v2[:2]) < 1: return [1500.0]
+    k = (v1[1]-v2[1])/(v1[0]-v2[0]) if (v1[0]-v2[0])!=0 else 999
+    b = v2[1]- k*v2[0]
+    p_uv = math.fabs(k*pp[0]-pp[1]+b)/math.pow(k*k+1, 0.5)
+    l_uv = math.sqrt((v1[1]-v2[1])**2 + (v1[0]-v2[0])**2)
+    l_pu = math.sqrt((v1[1]-pp[1])**2 + (v1[0]-pp[0])**2)
+    u_uv = math.sqrt(max(0, l_pu**2 - p_uv**2))
+    v_uv = abs(l_uv - u_uv)
+    res = math.sqrt(abs(u_uv*v_uv - p_uv**2))
+    return [res if 1000 < res < 8000 else 3500.0]
 
-def draw_inliers(image: np.ndarray, masks: List[np.ndarray], lines: np.ndarray) -> np.ndarray:
-    out = image.copy(); cv_colors = [(0, 0, 255), (255, 255, 0), (0, 255, 0)] 
-    for i, m in enumerate(masks):
-        if m is None or i >= len(cv_colors): continue
-        v_lines = lines[m]; v_lines = sorted(v_lines, key=lambda x: np.linalg.norm(x[1]-x[0]), reverse=True)[:15]
-        for l in v_lines: cv2.line(out, tuple(l[0].astype(int)), tuple(l[1].astype(int)), cv_colors[i], 2)
-    return out
+def calculate_rotation_matrix(vps: List[np.ndarray], focal: float, pp: np.ndarray) -> np.ndarray:
+    ux = np.array([vps[0][0] - pp[0], vps[0][1] - pp[1], focal])
+    ux /= np.linalg.norm(ux)
+    uz = np.array([vps[2][0] - pp[0], vps[2][1] - pp[1], focal])
+    if uz[1] > 0: uz *= -1
+    uz /= np.linalg.norm(uz)
+    uy = np.cross(uz, ux)
+    uy /= np.linalg.norm(uy)
+    uz = np.cross(ux, uy)
+    return np.column_stack((ux, uy, uz))
 
-def main(image_path: str, origin_x: float = 0, origin_y: float = 0, camera_h: float = 1.5, iterations: int = 1000):
+def calculate_camera_attitude(r_m: np.ndarray) -> np.ndarray:
+    r_c2w = r_m.T
+    sy = math.sqrt(r_c2w[0, 0]**2 + r_c2w[1, 0]**2)
+    if sy > 1e-6:
+        p, y, r = math.atan2(-r_c2w[2, 0], sy), math.atan2(r_c2w[1, 0], r_c2w[0, 0]), math.atan2(r_c2w[2, 1], r_c2w[2, 2])
+    else:
+        p, y, r = math.atan2(-r_c2w[2, 0], sy), math.atan2(-r_c2w[0, 1], r_c2w[1, 1]), 0
+    return np.array([y, p, r]) * 180 / np.pi
+
+def draw_inliers(image: np.ndarray, inlier_masks: List[np.ndarray], lines: np.ndarray) -> np.ndarray:
+    output_img = image.copy()
+    colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)] 
+    for i, mask in enumerate(inlier_masks):
+        if mask is None or i >= len(colors): continue
+        v_lines = lines[mask]
+        v_lines = sorted(v_lines, key=lambda l: np.linalg.norm(l[1]-l[0]), reverse=True)[:15]
+        for line in v_lines:
+            cv2.line(output_img, tuple(line[0].astype(int)), tuple(line[1].astype(int)), colors[i], 3)
+    return output_img
+
+def main(image_path: str, px_x: float, px_y: float, h: float, **kwargs) -> Tuple[float, np.ndarray, np.ndarray]:
     img_name = os.path.splitext(os.path.basename(image_path))[0]
-    
-    import json
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'config.json')
-    try:
-        with open(config_path, 'r') as f:
-            cfg = json.load(f)['calibration']
-    except Exception:
-        cfg = {"contrast": 1.2, "sharpness": 1.5, "sigma": 2.0, "iterations": iterations, "line_length": 45, "line_gap": 10, "threshold": 1.5, "processing_width": 1024}
-        
-    inliers, vps, viz = get_vp_inliers(
-        image_path, contrast=cfg.get("contrast", 1.2), sharpness=cfg.get("sharpness", 1.5), sigma=cfg.get("sigma", 2.0),
-        iterations=cfg.get("iterations", iterations), line_len=cfg.get("line_length", 45), line_gap=cfg.get("line_gap", 10), threshold=cfg.get("threshold", 1.5),
-        processing_width=cfg.get("processing_width", 1024)
-    )
-    full = viz[0]
-    if full is None:
-        raise ValueError(f"Could not read image: {image_path}")
-    pp = np.array([full.shape[1]/2, full.shape[0]/2])
-    focal = determine_focal_length(vps, full)[0]
-    rm = calculate_rotation_matrix(vps, focal, pp)
-    att = calculate_camera_attitude(rm)
-    
-    pitch_rad = math.radians(att[1])
-    trans_vec = np.array([0, camera_h, camera_h * math.tan(pitch_rad)]) if abs(math.cos(pitch_rad)) > EPS else np.array([0, camera_h, 0])
-    
-    origin = [int(origin_x), int(origin_y)] if origin_x > 0 else estimate_origin_from_inliers(full.shape, inliers, viz[3])
-    vps_reconstructed = reconstruct_vps(rm, focal, pp)
-    res = draw_axes_on_image(full, vps_reconstructed, origin, attitude=att)
-    os.makedirs("outputs", exist_ok=True)
-    cv2.imwrite(os.path.join("outputs", f"result_{img_name}.png"), cv2.cvtColor(res, cv2.COLOR_RGB2BGR))
-    return focal, rm, trans_vec
+    inliers, vps, viz = get_vp_inliers(image_path, 1.5, 2.0, 3, 3000, 11, 7, 2, processing_width=1280)
+    full_image = viz[0]
+    pp = np.array([full_image.shape[1]/2, full_image.shape[0]/2])
+    focal = determine_focal_length(vps, full_image)[0]
+    rot_matrix = calculate_rotation_matrix(vps, focal, pp)
+    attitude = calculate_camera_attitude(rot_matrix)
+    origin = estimate_origin_from_inliers(full_image.shape, inliers, viz[3])
+    res_img = draw_axes_on_image(full_image, vps, origin, attitude=attitude)
+    cv2.imwrite(os.path.join("outputs", f"{img_name}_axes.png"), cv2.cvtColor(res_img, cv2.COLOR_RGB2BGR))
+    return focal, rot_matrix, np.array([0, 0, h])

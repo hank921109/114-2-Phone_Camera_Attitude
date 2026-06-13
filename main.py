@@ -14,7 +14,7 @@ try:
         get_vp_inliers, draw_axes_on_image, calculate_camera_attitude, 
         determine_focal_length, read_image,
         calculate_rotation_matrix, draw_inliers,
-        estimate_origin_from_inliers, reconstruct_vps
+        estimate_origin_from_inliers
     )
 except ImportError as e:
     print(f"Import Error: {e}")
@@ -66,7 +66,6 @@ def process_single_image(img_path: str, output_path: Optional[str] = None):
             
         focal_results = determine_focal_length(selected_vps, frame)
         focal = focal_results[0]
-        focal = determine_focal_length(selected_vps, frame)[0]
         rot_matrix = calculate_rotation_matrix(selected_vps, focal, pp)
         attitude = calculate_camera_attitude(rot_matrix)
 
@@ -77,9 +76,19 @@ def process_single_image(img_path: str, output_path: Optional[str] = None):
 
         # 2. 自動估計繪圖原點 (地平線起點)
         origin = estimate_origin_from_inliers(frame.shape, inliers, viz_stuff[3])
-        vps_reconstructed = reconstruct_vps(rot_matrix, focal, pp)
             
-        processed_frame = draw_axes_on_image(processed_frame, vps_reconstructed, origin, length=height//4, attitude=attitude)
+        K = np.array([[focal, 0, pp[0]], [0, focal, pp[1]], [0, 0, 1]])
+        corrected_vps = []
+        for i in range(3):
+            vp_dir = rot_matrix[:, i]
+            if abs(vp_dir[2]) < 0.01:
+                corrected_vps.append(np.array([vp_dir[0], vp_dir[1], 0.0]))
+            else:
+                vp_homo = K @ vp_dir
+                vp_2d = vp_homo[:2] / vp_homo[2]
+                corrected_vps.append(np.array([vp_2d[0], vp_2d[1], vp_dir[2]]))
+                
+        processed_frame = draw_axes_on_image(processed_frame, corrected_vps, origin, length=height//4, attitude=attitude)
         
         if focal:
             cv2.putText(processed_frame, f"Focal: {focal:.1f}", (width - 300, 100), 
@@ -90,9 +99,10 @@ def process_single_image(img_path: str, output_path: Optional[str] = None):
             print(f"Result saved to {output_path}")
             
         # 自動開啟對應的結果圖片 (Auto-open the result image)
-        cv2.imshow("Calibration Result", cv2.cvtColor(processed_frame, cv2.COLOR_RGB2BGR))
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if "BENCHMARK" not in os.environ:
+            cv2.imshow("Calibration Result", cv2.cvtColor(processed_frame, cv2.COLOR_RGB2BGR))
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
     except Exception as e:
         print(f"Error processing image: {e}")
 
@@ -112,12 +122,10 @@ def process_video(video_path: str, output_path: str, stride: int = 2, max_frames
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 in_masks, vps, viz = get_vp_inliers(frame_rgb, 1.2, 1.5, 2.0, 1000, 30, 10, 2.0, 800)
                 if len(vps) >= 2:
-                    focal = determine_focal_length(vps, frame)[0]
-                    rm = calculate_rotation_matrix(vps, focal, [width//2, height//2])
-                    att = calculate_camera_attitude(rm)
-                    vps_reconstructed = reconstruct_vps(rm, focal, [width//2, height//2])
+                    f = determine_focal_length(vps, frame)[0]
+                    att = calculate_camera_attitude(calculate_rotation_matrix(vps, f, [width/2, height/2]))
                     # 影片繪製原點設在中心
-                    processed_frame = draw_axes_on_image(frame, vps_reconstructed, [width//2, height//2], length=height//4, attitude=att)
+                    processed_frame = draw_axes_on_image(frame, vps, [width//2, height//2], length=height//4, attitude=att)
                 else:
                     processed_frame = frame
                 proc_fps = 1.0 / (time.time() - start_time) if (time.time() - start_time) > 0 else 0
