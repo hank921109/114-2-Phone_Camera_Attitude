@@ -53,10 +53,10 @@ graph TD
     System[Vanishing Point Calibration System]
     
     subgraph Single Camera Calibration
-        System -- "Raw Image" --> PRE[Image Preprocessing]
-        PRE -- "Filtered Image" --> DET[Feature Detection]
-        DET -- "Line Segments" --> RAN[Model Estimation]
-        RAN -- "Vanishing Points" --> POS[Orientation Solving]
+        System -- "Raw Image<br/>uint8[H,W,3]" --> PRE[Image Preprocessing]
+        PRE -- "Filtered Image<br/>uint8[H,W]" --> DET[Feature Detection]
+        DET -- "Line Segments<br/>int32[N,4]" --> RAN[Model Estimation]
+        RAN -- "Vanishing Points<br/>float64[3,3]" --> POS[Orientation Solving]
 
         PRE --- PRE_Desc["1. CLAHE Contrast<br/>2. Gaussian Blur"]
         DET --- DET_Desc["1. Otsu Binarization<br/>2. Adaptive Canny<br/>3. Probabilistic Hough"]
@@ -65,9 +65,9 @@ graph TD
     end
 
     subgraph Stereo Visual Odometry
-        System -- "Stereo Image Pair" --> VO_PRE[Stereo Processing]
-        VO_PRE -- "Disparity Map & Images" --> VO_FEAT[Feature Tracking]
-        VO_FEAT -- "Matched Keypoints" --> VO_MOT[Motion Estimation]
+        System -- "Stereo Image Pair<br/>Tuple(uint8[H,W,3], uint8[H,W,3])" --> VO_PRE[Stereo Processing]
+        VO_PRE -- "Disparity Map & Images<br/>float32[H,W]" --> VO_FEAT[Feature Tracking]
+        VO_FEAT -- "Matched Keypoints<br/>Tuple(float32[N,2], float32[N,2])" --> VO_MOT[Motion Estimation]
         
         VO_PRE --- VO_PRE_Desc["1. Undistortion & Rectification<br/>2. SGBM Disparity Map"]
         VO_FEAT --- VO_FEAT_Desc["1. ORB Keypoints<br/>2. FLANN/Brute-Force Matching"]
@@ -99,13 +99,13 @@ graph TD
 ![單鏡頭影像 Pipeline Inliers](docs/images/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
 
 #### API Table
-| 模組 | 函數名稱 | 參數簡列 | 描述 |
+| 模組 | 函數名稱 | 參數與資料型態 (Datatypes) | 描述 |
 | :--- | :--- | :--- | :--- |
-| **Line Extractor** | `get_hough_lines_cv()` | **Texture Filtering** | 提高邊緣閾值，過濾樹木紋理 |
-| **VP Engine** | `get_vp_inliers()` | **Semantic Split** | 分離地平面與垂直結構特徵，實作 Dual-Source 偵測 |
-| **Pose Solver** | `calculate_rotation_matrix()`| **Strict Orthogonality**| 基於 Z-Forward 標準實作二次正交校準 |
-| **Visualizer** | `draw_axes_on_image()` | **Infinity Handling** | 支援無窮遠消失點渲染，自動調整 Y 軸方向 |
-| **Visual Odometry**| `VisualOdometryEstimator.run()`| **Motion Estimation** | 結合立體視差與特徵追蹤，透過 PnP RANSAC 求解連續影像之相對姿態 |
+| **Line Extractor** | `get_hough_lines_cv()` | `img: np.ndarray[uint8, 2D]`<br/>`-> lines: np.ndarray[int32, (N,4)]` | 提高邊緣閾值，過濾樹木紋理，找出結構線段 |
+| **VP Engine** | `get_vp_inliers()` | `lines: np.ndarray[int32, (N,4)]`<br/>`-> vps: np.ndarray[float64, (3,3)]` | 分離地平面與垂直結構特徵，利用 RANSAC 尋找消失點 |
+| **Pose Solver** | `calculate_rotation_matrix()`| `vps: np.ndarray[float64, (3,3)]`<br/>`-> rot_matrix: np.ndarray[float64, (3,3)]` | 基於 Z-Forward 標準實作二次正交校準以計算旋轉矩陣 |
+| **Visualizer** | `draw_axes_on_image()` | `img: np.ndarray[uint8, 3D], rot_matrix: np.ndarray`<br/>`-> out_img: np.ndarray[uint8, 3D]` | 支援無窮遠消失點渲染，自動投影並繪製 3D 姿態軸 |
+| **Visual Odometry**| `VisualOdometryEstimator.run()`| `left_img: np.ndarray[uint8, 3D], right_img: np.ndarray[uint8, 3D]`<br/>`-> pose: np.ndarray[float64, (4,4)]` | 結合立體視差與特徵追蹤，透過 PnP RANSAC 求解相機姿態 |
 
 ---
 
