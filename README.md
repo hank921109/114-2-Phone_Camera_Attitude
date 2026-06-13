@@ -88,7 +88,7 @@ graph TD
 | **Euler Decomposition** | 歐拉角分解演算法<br/><img src="https://danceswithcode.net/engineeringnotes/rotations_in_3d/images/fig01.png" width="150"/> | 從旋轉矩陣中提取 Yaw, Pitch, Roll 指標 | 基於相機座標系 (Z-Forward)，利用 atan2 函數處理矩陣項之比例關係 |
 | **SGBM** | 立體匹配與視差計算<br/>[原理說明連結](https://jiweibo.github.io/StereoBM/) | 從雙鏡頭影像獲取 3D 深度資訊 | 使用 Semi-Global Block Matching 建立視差圖 |
 | **SIFT / ORB** | 特徵點檢測與描述<br/><img src="https://media.geeksforgeeks.org/wp-content/uploads/20200606191134/8A1FB766-72C5-4CC8-8C25-0AF81A9E2998-1024x452.png" width="150"/> | 建立連續影像間的特徵對應基準 | 在尺度空間中尋找極值點並計算局部特徵描述子 |
-| **PnP RANSAC** | 相機姿態估計 | 排除誤匹配並計算相對運動 | 利用 2D-3D 特徵點對應，以 RANSAC 篩選 Inliers 並求解旋轉與平移矩陣 |
+| **PnP RANSAC** | 相機姿態估計<br/><img src="https://ai2-s2-public.s3.amazonaws.com/figures/2017-08-08/c8e48ecc3911cc71717af577cc958c360b85f2fa/3-Figure1-1.png" width="150"/> | 因為在追蹤 3D 點的時候，常常會不小心追蹤錯（例如把左邊的樹葉誤認成右邊的樹葉，這就是 Outlier）。所以我們把 PnP 塞進 RANSAC 裡面，讓電腦每次隨機挑幾個 3D 點來猜測相機位置，然後大家投票，藉此剔除那些「追蹤錯誤的雜訊」 | 利用 2D-3D 特徵點對應，以 RANSAC 篩選 Inliers 並求解旋轉與平移矩陣 |
 
 ---
 
