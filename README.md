@@ -83,10 +83,10 @@ graph TD
 | **Adaptive Canny** | 邊緣檢測演算法 | 提取結構化輪廓 | 結合 Otsu 門檻動態調整 Canny 的遲滯門檻 (Hysteresis Thresholding) |
 | **Probabilistic Hough** | 霍夫變換線段偵測 | 將邊緣點群聚合為幾何線段 | 透過 `minLineLength` 過濾短線段，保留建築與車道線結構 |
 | **Vectorized RANSAC** | 隨機抽樣一致演算法 | 從線段池中篩選出有效線段 | 利用 NumPy 廣播機制一次生成多組假設，提升運算效能 |
-| **Singular Value SVD** | 奇異值分解矩陣運算 | 從投票後的 Inlier 線段集中解出亞像素交點 | 建立超定齊次方程組 $A\mathbf{v} = \mathbf{0}$，透過 $A = U \Sigma V^T$ 提取最小奇異值對應之特徵向量 $\mathbf{v} = V_{[:, -1]}$ 作為消失點座標 |
+| **Singular Value SVD** | 奇異值分解矩陣運算<br/><img src="https://miro.medium.com/v2/resize:fit:786/format:webp/1*v1d2ZdSttc6DAapcwDnUdQ.jpeg" width="150"/><br/>[參考文章](https://levelup.gitconnected.com/unlocking-insights-exploring-singular-value-decomposition-svd-and-its-dynamic-applications-238377ccbd51) | 從投票後的 Inlier 線段集中解出亞像素交點 | 建立超定齊次方程組 $A\mathbf{v} = \mathbf{0}$，透過 $A = U \Sigma V^T$ 提取最小奇異值對應之特徵向量 $\mathbf{v} = V_{[:, -1]}$ 作為消失點座標 |
 | **Manhattan World Ortho** | 曼哈頓世界正交化約束 | 確保三軸消失點在物理空間中互相垂直 | 透過 Cross Product 執行二次正交校準，確保旋轉矩陣之正規性 |
-| **Euler Decomposition** | 歐拉角分解演算法 | 從旋轉矩陣中提取 Yaw, Pitch, Roll 指標 | 基於相機座標系 (Z-Forward)，利用 atan2 函數處理矩陣項之比例關係 |
-| **SGBM** | 立體匹配與視差計算 | 從雙鏡頭影像獲取 3D 深度資訊 | 使用 Semi-Global Block Matching 建立視差圖 |
+| **Euler Decomposition** | 歐拉角分解演算法<br/><img src="https://danceswithcode.net/engineeringnotes/rotations_in_3d/images/fig01.png" width="150"/> | 從旋轉矩陣中提取 Yaw, Pitch, Roll 指標 | 基於相機座標系 (Z-Forward)，利用 atan2 函數處理矩陣項之比例關係 |
+| **SGBM** | 立體匹配與視差計算<br/>[原理說明連結](https://jiweibo.github.io/StereoBM/) | 從雙鏡頭影像獲取 3D 深度資訊 | 使用 Semi-Global Block Matching 建立視差圖 |
 | **SIFT** | 特徵點檢測與描述 | 建立連續影像間的特徵對應基準 | 在尺度空間中尋找極值點並計算局部梯度方向直方圖 |
 | **PnP RANSAC** | 相機姿態估計 | 排除誤匹配並計算相對運動 | 利用 2D-3D 特徵點對應，以 RANSAC 篩選 Inliers 並求解旋轉與平移矩陣 |
 
@@ -130,7 +130,7 @@ graph TD
 
 **雙鏡頭輸入 (Stereo Visual Odometry 軌跡與誤差驗證)**：
 ![Visual Odometry](docs/images/visual_odometry.gif)
-**註**：`Prediction` (紅線) 為推估軌跡，`Ground Truth` (藍線) 為真實軌跡；下方圖表同步顯示 Yaw、Pitch、Roll 變化以利 ATE (Absolute Trajectory Error) / RPE (Relative Pose Error) 誤差對比。
+**註**：`Prediction` (紅線) 為推估軌跡，`Ground Truth` (藍線) 為真實軌跡；右方圖表同步顯示 Yaw、Pitch、Roll 變化以利 ATE (Absolute Trajectory Error) / RPE (Relative Pose Error) 誤差對比。
 
 ![Visual Odometry 路口轉彎](visual_odometry/assets/visual_odometry.png)
 
