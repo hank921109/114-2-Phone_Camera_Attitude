@@ -87,7 +87,7 @@ graph TD
 | **Manhattan World Ortho** | 曼哈頓世界正交化約束 | 確保三軸消失點在物理空間中互相垂直 | 透過 Cross Product 執行二次正交校準，確保旋轉矩陣之正規性 |
 | **Euler Decomposition** | 歐拉角分解演算法<br/><img src="https://danceswithcode.net/engineeringnotes/rotations_in_3d/images/fig01.png" width="150"/> | 從旋轉矩陣中提取 Yaw, Pitch, Roll 指標 | 基於相機座標系 (Z-Forward)，利用 atan2 函數處理矩陣項之比例關係 |
 | **SGBM** | 立體匹配與視差計算<br/>[原理說明連結](https://jiweibo.github.io/StereoBM/) | 從雙鏡頭影像獲取 3D 深度資訊 | 使用 Semi-Global Block Matching 建立視差圖 |
-| **SIFT** | 特徵點檢測與描述 | 建立連續影像間的特徵對應基準 | 在尺度空間中尋找極值點並計算局部梯度方向直方圖 |
+| **SIFT / ORB** | 特徵點檢測與描述<br/><img src="https://media.geeksforgeeks.org/wp-content/uploads/20200606191134/8A1FB766-72C5-4CC8-8C25-0AF81A9E2998-1024x452.png" width="150"/> | 建立連續影像間的特徵對應基準 | 在尺度空間中尋找極值點並計算局部特徵描述子 |
 | **PnP RANSAC** | 相機姿態估計 | 排除誤匹配並計算相對運動 | 利用 2D-3D 特徵點對應，以 RANSAC 篩選 Inliers 並求解旋轉與平移矩陣 |
 
 ---
