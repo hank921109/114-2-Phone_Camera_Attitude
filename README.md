@@ -35,13 +35,15 @@
 | **立體視覺與姿態估計**| `cv2.StereoSGBM_create`, `cv2.solvePnPRansac`, `cv2.Rodrigues` | SGBM 雙目視差圖計算、利用 3D-2D 特徵對推算相機相對運動、旋轉矩陣與旋轉向量互相轉換 |
 | **幾何繪圖與 GUI** | `cv2.line`, `cv2.arrowedLine`, `cv2.putText`, `cv2.addWeighted` | 標記消失點連線、繪製即時 3D 姿態軸 (XYZ)、渲染半透明文字 HUD 與動態資訊面板 |
 
-#### RANSAC 消失點檢測原理
-| 步驟 | 動作 | 實作技術 |
+#### RANSAC (隨機抽樣一致) 消失點檢測原理
+RANSAC 的運作方式類似於「**隨機猜測 + 多數決**」。在真實影像中會有很多干擾線條（例如樹枝、陰影邊緣），我們透過不斷隨機測試，找出最多線條支持的「消失點」。
+
+| 步驟 | 概念說明 | 程式實作技術 |
 | :--- | :--- | :--- |
-| **1. 採樣 (Sampling)** | 隨機選取兩條線段作為模型假設 | **Vectorized Batch Sampling** (生成 2000 組) |
-| **2. 假設 (Hypothesis)** | 計算兩條線的交點作為潛在消失點 | **Homogeneous Cross Product** (齊次座標外積) |
-| **3. 驗證 (Verification)** | 統計 Inliers 並計算角度殘差 | **NumPy Matrix Multiply** (矩陣化運算) |
-| **4. 精煉 (Refinement)** | 使用投票線段重新求解交點 | **SVD (Singular Value Decomposition)** 奇異值分解 |
+| **1. 採樣 (Sampling)** | **隨機挑選**：從畫面中隨機選出兩條線，假設它們是正確的邊緣。 | **Vectorized Batch Sampling** (批次生成 2000 組) |
+| **2. 假設 (Hypothesis)** | **尋找交點**：將這兩條線延伸並算出交點，暫時將其當作「消失點」。 | **Homogeneous Cross Product** (齊次座標外積) |
+| **3. 驗證 (Verification)** | **多數決投票**：檢查畫面中其他的線，計算有多少條也指向這個交點。支持的線越多，代表這個交點越可靠（支持的線稱為 Inliers）。 | **NumPy Matrix Multiply** (矩陣化運算) |
+| **4. 精煉 (Refinement)** | **綜合重算**：重複上述動作數千次，找出得票數最高的交點。最後把所有支持該點的線收集起來，精確算出最終座標。 | **SVD (Singular Value Decomposition)** 奇異值分解 |
 
 ![RANSAC 採樣與驗證原理圖](https://docs.mrpt.org/reference/latest/_images/math_ransac_examples_screenshot.png)
 
@@ -121,7 +123,7 @@ graph TD
 
 #### 4.2 KITTI 道路實測成果 (Dynamic Sequences)
 
-**單鏡頭輸入 (Vanishing Point 標定)**：
+**單鏡頭 單frame 輸入 (Vanishing Point 標定)**：
 | ![result_000000](docs/images/result_000000.png) | ![result_000001](docs/images/result_000001.png) | ![result_000008](docs/images/result_000008.png) |
 | :---: | :---: | :---: |
 | **00: 初始偏差校正** | **01: 結構轉角定位** | **08: 長直線深度追蹤** |
