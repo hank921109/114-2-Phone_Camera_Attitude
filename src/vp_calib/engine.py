@@ -143,6 +143,17 @@ def calculate_rotation_matrix(vps: List[np.ndarray], focal: float, pp: np.ndarra
     
     return np.column_stack((ux, uy, uz))
 
+def reconstruct_vps(rm: np.ndarray, focal: float, pp: np.ndarray) -> List[np.ndarray]:
+    vps_perfect = []
+    for i in range(3):
+        v = rm[:, i]
+        vp = np.array([v[0]*focal + v[2]*pp[0], v[1]*focal + v[2]*pp[1], v[2]])
+        if abs(vp[2]) > 1e-5:
+            vp[:2] /= vp[2]
+            vp[2] = 1.0
+        vps_perfect.append(vp)
+    return vps_perfect
+
 def calculate_camera_attitude(r: np.ndarray) -> np.ndarray:
     p = math.asin(-r[1, 2])
     if abs(math.cos(p)) > EPS:
@@ -183,23 +194,19 @@ def draw_axes_on_image(image: np.ndarray, vps: List[np.ndarray], origin_px: Unio
 
 def estimate_origin_from_inliers(image_shape: Tuple[int, ...], inlier_masks: List[np.ndarray], lines: np.ndarray) -> List[int]:
     h, w = image_shape[:2]
-    try:
-        if len(inlier_masks) >= 3 and inlier_masks[2] is not None:
-            iy_mask = inlier_masks[2]
-            v_lines = lines[iy_mask]
-            if len(v_lines) > 0:
-                # Find the lowest point of the vertical lines (wall corner at the floor)
-                max_y = -1
-                best_pt = [w // 2, int(h * 0.85)]
-                for line in v_lines:
-                    for pt in line:
-                        if pt[1] > max_y:
-                            max_y = pt[1]
-                            best_pt = pt.tolist()
-                return [int(best_pt[0]), int(best_pt[1])]
-    except Exception:
-        pass
-    return [w // 2, int(h * 0.85)]
+    ox, oy = int(w * 0.15), int(h * 0.85)
+    
+    if len(inlier_masks) >= 3 and inlier_masks[1] is not None and inlier_masks[2] is not None:
+        y_lines = lines[inlier_masks[2]]
+        if len(y_lines) > 0:
+            y_pts = y_lines.reshape(-1, 2)
+            dists = np.linalg.norm(y_pts - np.array([w*0.2, h*0.8]), axis=1)
+            best_pt = y_pts[np.argmin(dists)]
+            pad = int(min(w, h) * 0.15)
+            ox = int(np.clip(best_pt[0], pad, w - pad))
+            oy = int(np.clip(best_pt[1], pad, h - pad))
+    return [ox, oy]
+
 def determine_focal_length(vps: List[np.ndarray], image: np.ndarray) -> List[float]:
     default_focal = 715.0
     if len(vps) >= 3 and vps[1] is not None and vps[2] is not None:
@@ -246,7 +253,8 @@ def main(image_path: str, origin_x: float = 0, origin_y: float = 0, camera_h: fl
     trans_vec = np.array([0, camera_h, camera_h * math.tan(pitch_rad)]) if abs(math.cos(pitch_rad)) > EPS else np.array([0, camera_h, 0])
     
     origin = [int(origin_x), int(origin_y)] if origin_x > 0 else estimate_origin_from_inliers(full.shape, inliers, viz[3])
-    res = draw_axes_on_image(full, vps, origin, attitude=att)
+    vps_reconstructed = reconstruct_vps(rm, focal, pp)
+    res = draw_axes_on_image(full, vps_reconstructed, origin, attitude=att)
     os.makedirs("outputs", exist_ok=True)
     cv2.imwrite(os.path.join("outputs", f"result_{img_name}.png"), cv2.cvtColor(res, cv2.COLOR_RGB2BGR))
     return focal, rm, trans_vec
