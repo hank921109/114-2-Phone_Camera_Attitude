@@ -94,9 +94,10 @@ graph TD
 
 ### 3. 系統設計 (System Design)
 
-#### 資料流圖 (DFD)
+#### 資料流圖 (DFD) 與效能甘特圖
 ![Data Flow Diagram](docs/dataflow.jpg)
 ![單鏡頭影像 Pipeline Inliers](docs/images/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
+![Visual Odometry Pipeline Gantt Chart](docs/images/pipeline_gantt.png)
 
 #### API Table
 | 模組 | 函數名稱 | 參數與資料型態 (Datatypes) | 描述 |
