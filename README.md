@@ -95,7 +95,7 @@ graph TD
 ### 3. 系統設計 (System Design)
 
 #### 資料流圖 (DFD) 與效能甘特圖
-![Data Flow Diagram](docs/dataflow.jpg)
+![Data Flow Diagram](docs/dataflow.svg)
 ![單鏡頭影像 Pipeline Inliers](docs/images/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
 ![Visual Odometry Pipeline Gantt Chart](docs/images/pipeline_gantt.png)
 
@@ -115,7 +115,7 @@ graph TD
 #### 4.1 GUI 交互界面
 ![GUI Interface](docs/images/gui_interface.png) 
 
-### 室內圖像
+### 室內圖像 (單鏡頭)
 | ![rt0](docs/images/result_rt0.jpg) | ![rt1](docs/images/result_rt1.jpg) | ![rt2](docs/images/result_rt2.jpg) | ![rt3](docs/images/result_rt3.jpg) |
 | :---: | :---: | :---: | :---: |
 | **Indoor: rt0** | **Indoor: rt1** | **Indoor: rt2** | **Indoor: rt3** |
