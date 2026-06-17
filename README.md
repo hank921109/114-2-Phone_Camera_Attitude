@@ -15,7 +15,7 @@
         1.  **絕對準確度**：Pitch 角度在水平拍攝下趨近於 0°（誤差 < 3°）。
         2.  **相對追蹤 (Relative Tracking)**：在動態序列中，Yaw 與 Roll 的相對變化誤差 < 1.5°。
     *   **測試步驟 (DOE)**：
-        *   **統一啟動介面**：直接執行 `python3 main.py`，系統將彈出輕量級 GUI 啟動選單 (支援 Raspi 等環境)。
+        *   **統一啟動介面**：直接執行 `python3 main.py`，系統將彈出 GUI 啟動選單 (支援 Raspi 等環境)。
         *   若選擇**單鏡頭**選項並開啟相片/影片，系統會自動載入單鏡頭消失點管線。
         *   若選擇**雙鏡頭**選項並開啟資料夾 (例如 KITTI Dataset)，系統會自動載入雙鏡頭視覺里程計管線。
 
@@ -30,7 +30,7 @@
 | **影像與影片 I/O** | `cv2.imread`, `cv2.imwrite`, `cv2.VideoCapture`, `cv2.VideoWriter` | 讀寫單張相片、連續影格序列處理與成果影片編碼輸出 |
 | **色彩與預處理** | `cv2.cvtColor`, `cv2.resize`, `cv2.convertScaleAbs` | 灰階與 RGB 空間轉換、影像縮小以提升運算速度、對比度線性強化 |
 | **進階影像濾波** | `cv2.createCLAHE`, `cv2.GaussianBlur` | 解決逆光與陰影問題的自適應直方圖均衡化、高斯平滑降噪 |
-| **邊緣與線段檢測** | `cv2.threshold` (Otsu), `cv2.Canny`, `cv2.HoughLinesP` | 最佳化二值化門檻、提取結構輪廓邊緣、利用機率霍夫變換找出建築與車道線段 |
+| **邊緣與線段檢測** | `cv2.threshold` (Otsu), `cv2.Canny`, `cv2.HoughLinesP` | 計算二值化門檻、提取結構輪廓邊緣、利用機率霍夫變換找出建築與車道線段 |
 | **特徵追蹤與匹配** | `cv2.ORB_create`, `cv2.BFMatcher` | ORB 特徵點萃取與二進制描述子計算、暴力特徵點追蹤與配對 |
 | **立體視覺與姿態估計**| `cv2.StereoSGBM_create`, `cv2.solvePnPRansac`, `cv2.Rodrigues` | SGBM 雙目視差圖計算、利用 3D-2D 特徵對推算相機相對運動、旋轉矩陣與旋轉向量互相轉換 |
 | **幾何繪圖與 GUI** | `cv2.line`, `cv2.arrowedLine`, `cv2.putText`, `cv2.addWeighted` | 標記消失點連線、繪製即時 3D 姿態軸 (XYZ)、渲染半透明文字 HUD 與動態資訊面板 |
@@ -42,10 +42,14 @@ RANSAC 的運作方式類似於「**隨機猜測 + 多數決**」。在真實影
 | :--- | :--- | :--- |
 | **1. 採樣 (Sampling)** | **隨機挑選**：從畫面中隨機選出兩條線，假設它們是正確的邊緣。 | **Vectorized Batch Sampling** (批次生成 2000 組) |
 | **2. 假設 (Hypothesis)** | **尋找交點**：將這兩條線延伸並算出交點，暫時將其當作「消失點」。 | **Homogeneous Cross Product** (齊次座標外積) |
-| **3. 驗證 (Verification)** | **多數決投票**：檢查其他線條。指向交點的稱為 **Inliers (真正線索/支持者)**；干擾判斷的雜訊稱為 **Outliers (來亂的干擾者)**。找出擁有最多支持者的交點。 | **NumPy Matrix Multiply** (矩陣化運算) |
-| **4. 精煉 (Refinement)** | **綜合重算**：重複數千次後找出最高票的交點。最後把所有 Inliers 集中起來，透過進階平均演算法求出一個滿足所有人的「最佳黃金交點」。 | **SVD (Singular Value Decomposition)** 奇異值分解 |
+| **3. 驗證 (Verification)** | **多數決投票**：檢查其他線條。指向交點的稱為 **Inliers (支持者)**；干擾判斷的雜訊稱為 **Outliers (干擾者)**。找出擁有最多支持者的交點。 | **NumPy Matrix Multiply** (矩陣化運算) |
+| **4. 精煉 (Refinement)** | **綜合重算**：重複數千次後找出最高票的交點。最後把所有 Inliers 集中起來，透過平均演算法求出滿足所有人的交點。 | **SVD (Singular Value Decomposition)** 奇異值分解 |
 
-![RANSAC 採樣與驗證原理圖](https://docs.mrpt.org/reference/latest/_images/math_ransac_examples_screenshot.png)
+<p align="center">
+  <img src="https://docs.mrpt.org/reference/latest/_images/math_ransac_examples_screenshot.png" />
+  <br/>
+  <i>Fig. 1: RANSAC 採樣與驗證原理示意圖</i>
+</p>
 
 #### 演算法拆解 (Algorithm Breakdown)
 ```mermaid
@@ -95,9 +99,16 @@ graph TD
 ### 3. 系統設計 (System Design)
 
 #### 資料流圖 (DFD) 與效能甘特圖
-![Data Flow Diagram](docs/dataflow.svg)
-![單鏡頭影像 Pipeline Inliers](docs/images/rt1_inliers_iter3000_thresh2_sigma5_hlen11_hgap7.png)
-![Visual Odometry Pipeline Gantt Chart](docs/images/pipeline_gantt.png)
+<p align="center">
+  <img src="docs/dataflow.svg" />
+  <br/>
+  <i>Fig. 2: Data Flow Diagram (資料流圖)</i>
+</p>
+<p align="center">
+  <img src="docs/images/pipeline_gantt.png" />
+  <br/>
+  <i>Fig. 3: Visual Odometry Pipeline Gantt Chart (效能甘特圖)</i>
+</p>
 
 #### API Table
 | 模組 | 函數名稱 | 參數與資料型態 (Datatypes) | 描述 |
@@ -113,7 +124,11 @@ graph TD
 ### 4. 驗證與結果
 
 #### 4.1 GUI 交互界面
-![GUI Interface](docs/images/gui_interface.png) 
+<p align="center">
+  <img src="docs/images/gui_interface.png" />
+  <br/>
+  <i>Fig. 4: GUI 操作介面</i>
+</p>
 
 ### 室內圖像 (單鏡頭)
 | ![rt0](docs/images/result_rt0.jpg) | ![rt1](docs/images/result_rt1.jpg) | ![rt2](docs/images/result_rt2.jpg) | ![rt3](docs/images/result_rt3.jpg) |
@@ -122,6 +137,8 @@ graph TD
 | ![rt4](docs/images/result_rt4.jpg) | ![rt5](docs/images/result_rt5.jpg) | ![rt6](docs/images/result_rt6.jpg) | ![rt7](docs/images/result_rt7.jpg) |
 | **Indoor: rt4** | **Indoor: rt5** | **Indoor: rt6** | **Indoor: rt7** |
 
+<p align="center"><i>Fig. 5: 單鏡頭室內圖像校準結果</i></p>
+
 #### 4.2 KITTI 道路實測成果 (Dynamic Sequences)
 
 **單鏡頭 單frame 輸入 (Vanishing Point 標定)**：
@@ -129,11 +146,22 @@ graph TD
 | :---: | :---: | :---: |
 | **00: 初始偏差校正** | **01: 結構轉角定位** | **08: 長直線深度追蹤** |
 
+<p align="center"><i>Fig. 6: KITTI 資料集單鏡頭 VP 偵測結果</i></p>
+
 **雙鏡頭輸入 (Stereo Visual Odometry 軌跡與誤差驗證)**：
-![Visual Odometry](docs/images/visual_odometry.gif)
+<p align="center">
+  <img src="docs/images/visual_odometry.gif" />
+  <br/>
+  <i>Fig. 7: Visual Odometry 動態軌跡估計與 Ground Truth 比對</i>
+</p>
+
 **註**：`Prediction` (紅線) 為推估軌跡，`Ground Truth` (藍線) 為真實軌跡；右方圖表同步顯示 Yaw、Pitch、Roll 變化以利 ATE (Absolute Trajectory Error) / RPE (Relative Pose Error) 誤差對比。
 
-![Visual Odometry 路口轉彎](visual_odometry/assets/visual_odometry.png)
+<p align="center">
+  <img src="visual_odometry/assets/visual_odometry.png" />
+  <br/>
+  <i>Fig. 8: Visual Odometry 路口轉彎之軌跡特寫</i>
+</p>
 
 **效能優化歷程**：
 
