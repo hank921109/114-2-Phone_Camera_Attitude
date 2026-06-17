@@ -62,10 +62,19 @@ graph TD
         DET -- "Line Segments<br/>int32[N,4]" --> RAN[Model Estimation]
         RAN -- "Vanishing Points<br/>float64[3,3]" --> POS[Orientation Solving]
 
-        PRE --- PRE_Desc["1. CLAHE Contrast<br/>2. Gaussian Blur"]
-        DET --- DET_Desc["1. Otsu Binarization<br/>2. Adaptive Canny<br/>3. Probabilistic Hough"]
-        RAN --- RAN_Desc["1. Semantic Decoupling<br/>2. Vectorized RANSAC<br/>3. SVD Refinement"]
-        POS --- POS_Desc["1. Double Orthogonalization<br/>2. Euler Decomposition"]
+        PRE -.-> PRE_1["1. CLAHE Contrast"]
+        PRE_1 -.-> PRE_2["2. Gaussian Blur"]
+
+        DET -.-> DET_1["1. Otsu Binarization"]
+        DET_1 -.-> DET_2["2. Adaptive Canny"]
+        DET_2 -.-> DET_3["3. Probabilistic Hough"]
+
+        RAN -.-> RAN_1["1. Semantic Decoupling"]
+        RAN_1 -.-> RAN_2["2. Vectorized RANSAC"]
+        RAN_2 -.-> RAN_3["3. SVD Refinement"]
+
+        POS -.-> POS_1["1. Double Orthogonalization"]
+        POS_1 -.-> POS_2["2. Euler Decomposition"]
     end
 
     subgraph Stereo Visual Odometry
@@ -73,9 +82,16 @@ graph TD
         VO_PRE -- "Disparity Map & Images<br/>float32[H,W]" --> VO_FEAT[Feature Tracking]
         VO_FEAT -- "Matched Keypoints<br/>Tuple(float32[N,2], float32[N,2])" --> VO_MOT[Motion Estimation]
         
-        VO_PRE --- VO_PRE_Desc["1. Undistortion & Rectification<br/>2. SGBM Disparity Map"]
-        VO_FEAT --- VO_FEAT_Desc["1. ORB Keypoints<br/>2. FLANN/Brute-Force Matching"]
-        VO_MOT --- VO_MOT_Desc["1. 3D-2D Projection<br/>2. Perspective-n-Point RANSAC<br/>3. Trajectory Concatenation<br/>4. 軌跡起點初始化 (對齊 KITTI 首影格之 GT 原點)"]
+        VO_PRE -.-> VO_PRE_1["1. Undistortion & Rectification"]
+        VO_PRE_1 -.-> VO_PRE_2["2. SGBM Disparity Map"]
+
+        VO_FEAT -.-> VO_FEAT_1["1. ORB Keypoints"]
+        VO_FEAT_1 -.-> VO_FEAT_2["2. FLANN/Brute-Force Matching"]
+
+        VO_MOT -.-> VO_MOT_1["1. 3D-2D Projection"]
+        VO_MOT_1 -.-> VO_MOT_2["2. Perspective-n-Point RANSAC"]
+        VO_MOT_2 -.-> VO_MOT_3["3. Trajectory Concatenation"]
+        VO_MOT_3 -.-> VO_MOT_4["4. 軌跡起點初始化 (對齊 KITTI 首影格之 GT 原點)"]
     end
 ```
 
